@@ -1,7 +1,30 @@
 [project]
 name = "graphs-and-their-applications"
 version = "0.1.0"
-description = "Add your description here"
+description = "Group project for classes"
 readme = "README.md"
+authors = [
+    { name ="Jan Kot", email = "jan@catnip.supply" },
+    { name = "Filip Kwidziński", email = "fkwidzinski@student.agh.edu.pl" },
+    { name = "Artur Zamorowski", email = "arturzamorowskiiiiii@gmail.com" }
+]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "matplotlib>=3.11.2",
+    "networkx>=3.7",
+    "numpy>=2.5.3",
+    "scipy>=1.18.1",
+]
+
+[project.scripts]
+lab01 = "lab01:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["lab01"]
+
+[tool.uv]
+python-preference = "only-managed"
