@@ -1,8 +1,10 @@
 
 
 from pathlib import Path
+import sys
 from lab01.visualization import draw_circular
 from lab02.check_sequence import AdjacencyMatrixlab02, read_sequence_from_file
+import numpy as np
 
 EXAMPLES = Path(__file__).parent
 OUTPUT = Path("out")
@@ -19,6 +21,7 @@ def check_sequence(name,sequence):
     print("---------")
 
 def main():
+    np.set_printoptions(threshold=sys.maxsize)
     OUTPUT.mkdir(exist_ok=True)
     print("Zad 1")
     check_sequence("lab01_1", read_sequence_from_file(EXAMPLES / "example1.txt"))
@@ -32,6 +35,14 @@ def main():
     print("After 3 randomization")
     print(matrix.matrix)
     draw_circular(matrix.to_networkx(), OUTPUT / "lab02_2")
+    print("Zad 3")
+    matrix = AdjacencyMatrixlab02.from_file(EXAMPLES /"example_to_search_components.txt")
+    print(matrix.matrix)
+    print("Biggest complete component:")
+    print(matrix.find_biggest_connected_component())
+    draw_circular(matrix.to_networkx(), OUTPUT / "lab02_3")
+
+
 
 if __name__ == "__main__":
     main()

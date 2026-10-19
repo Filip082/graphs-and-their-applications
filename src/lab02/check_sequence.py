@@ -71,7 +71,31 @@ class AdjacencyMatrixlab02(AdjacencyMatrix):
             if amount_of_swaps == 0:
                 break
         self.matrix = incidence_matric.to_adjacency_matrix().matrix
-            
+
+    def find_biggest_connected_component(self):
+        adjacency_list = self.to_adjacency_list()
+        visited = set()
+        part_of_biggest_component = None
+        actuall = set()
+        part_of_biggest_component = set()
+        for vertex in range(len(adjacency_list.c)):
+            if vertex not in visited:
+                actuall = {vertex}
+                self._go_to_next_vertex(adjacency_list, vertex, visited, actuall)
+                if len(actuall) > len(part_of_biggest_component):
+                    part_of_biggest_component = actuall.copy()
+        return part_of_biggest_component
+
+
+    def _go_to_next_vertex(self, incidence_list, number, visited, actuall):
+        if number in visited:
+            return
+        visited.add(number)
+        actuall.add(number)
+        for next_vertex in incidence_list.c[number]:
+            self._go_to_next_vertex(incidence_list, next_vertex, visited, actuall)
+
+        
 
 def read_sequence_from_file(filename: str) -> np.Array:
     with open(filename, 'r') as f:

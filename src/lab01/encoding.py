@@ -84,7 +84,7 @@ class IncidenceMatrix:
 
 class AdjacencyList:
   def __init__(self, data) -> None:
-    self.neighbours = data
+    self.c = data
 
   @classmethod
   def from_file(cls, filename: str) -> AdjacencyList:
