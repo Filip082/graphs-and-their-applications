@@ -1,3 +1,5 @@
+import sys
+from collections import Counter, deque
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal, cast
@@ -5,7 +7,7 @@ from typing import Literal, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from graphs import convert
+from graphs import convert, utils
 from graphs.convert import AdjacencyList, AdjacencyMatrix, IncidenceMatrix
 
 GraphType = Literal["adjacency_list", "adjacency_matrix", "incidence_matrix"]
@@ -128,3 +130,287 @@ class Graph:
         return convert.adjacency_matrix_to_incidence_matrix(
             cast(AdjacencyMatrix, self.data)
         )
+
+    def _set_from_adjacency_list(self, adj: AdjacencyList) -> None:
+        if self.data_type == "adjacency_list":
+            self.data = adj
+        elif self.data_type == "adjacency_matrix":
+            self.data = convert.adjacency_list_to_adjacency_matrix(adj)
+        else:
+            self.data = convert.adjacency_list_to_incidence_matrix(adj)
+
+    def _components(self) -> list[int]:
+        adj = self.adjacency_list()
+        n = self.vertex_count
+        if n >= 900:
+            sys.setrecursionlimit(max(sys.getrecursionlimit(), n + 100))
+        comp = [-1] * n
+        nr = 0
+
+        def components_r(component_id: int, v: int) -> None:
+            for u in adj[v]:
+                if comp[u] == -1:
+                    comp[u] = component_id
+                    components_r(component_id, u)
+
+        for v in range(n):
+            if comp[v] == -1:
+                nr += 1
+                comp[v] = nr
+                components_r(nr, v)
+        return comp
+
+    @staticmethod
+    def from_sequence(sequence: Sequence[int] | NDArray[np.integer]) -> "Graph":
+        if not utils.is_graphic_sequence(sequence):
+            raise ValueError("Sequence is not a graphic sequence")
+
+        items = [[int(deg), idx] for idx, deg in enumerate(sequence)]
+        adj: AdjacencyList = [[] for _ in range(len(items))]
+
+        while items:
+            items.sort(key=lambda pair: pair[0], reverse=True)
+            deg, u = items[0]
+            if deg == 0:
+                break
+            items[0][0] = 0
+            for i in range(1, deg + 1):
+                v = items[i][1]
+                items[i][0] -= 1
+                adj[u].append(v)
+                adj[v].append(u)
+
+        return Graph(adj, "adjacency_list")
+
+    def randomize(self, n: int) -> None:
+        if n < 0:
+            raise ValueError("Number of randomization steps n must be non-negative")
+        if n == 0:
+            return
+
+        adj = self.adjacency_list()
+        adj_sets = [set(neighbors) for neighbors in adj]
+        edges: list[tuple[int, int]] = [
+            (u, v) for u, neighbors in enumerate(adj) for v in neighbors if u < v
+        ]
+        if len(edges) < 2:
+            return
+
+        rng = np.random.default_rng()
+
+        def try_swap(i: int, j: int) -> bool:
+            a, b = edges[i]
+            c, d = edges[j]
+            orientations = [(c, d), (d, c)] if rng.random() < 0.5 else [(d, c), (c, d)]
+            for x, y in orientations:
+                if (
+                    len({a, b, x, y}) == 4
+                    and y not in adj_sets[a]
+                    and x not in adj_sets[b]
+                ):
+                    adj_sets[a].remove(b)
+                    adj_sets[b].remove(a)
+                    adj_sets[x].remove(y)
+                    adj_sets[y].remove(x)
+                    adj_sets[a].add(y)
+                    adj_sets[y].add(a)
+                    adj_sets[b].add(x)
+                    adj_sets[x].add(b)
+                    edges[i] = (min(a, y), max(a, y))
+                    edges[j] = (min(b, x), max(b, x))
+                    return True
+            return False
+
+        m = len(edges)
+        max_attempts = 100
+        for _ in range(n):
+            swapped = False
+            for _ in range(max_attempts):
+                i = int(rng.integers(0, m))
+                j = int(rng.integers(0, m - 1))
+                if j >= i:
+                    j += 1
+                if try_swap(i, j):
+                    swapped = True
+                    break
+            if not swapped:
+                found_any = False
+                for i in range(m):
+                    for j in range(i + 1, m):
+                        if try_swap(i, j):
+                            found_any = True
+                            break
+                    if found_any:
+                        break
+                if not found_any:
+                    break
+
+        self._set_from_adjacency_list([sorted(neighbors) for neighbors in adj_sets])
+
+    @staticmethod
+    def create_random_k_regular(n: int, k: int) -> "Graph":
+        if n < 0 or k < 0:
+            raise ValueError("n and k must be non-negative")
+        if n == 0 and k > 0:
+            raise ValueError(
+                "Cannot create a k-regular graph with 0 vertices and k > 0"
+            )
+        if n > 0 and (k >= n or (n * k) % 2 != 0):
+            raise ValueError(f"Cannot create {k}-regular simple graph on {n} vertices")
+
+        graph = Graph.from_sequence([k] * n)
+        if n > 0 and k > 0:
+            graph.randomize(max(10, n * k * 2))
+        return graph
+
+    @staticmethod
+    def create_random_eulerian(n: int = 6) -> "Graph":
+        if n < 0:
+            raise ValueError("Number of vertices n must be non-negative")
+        if n == 2:
+            raise ValueError(
+                "Cannot create a connected Eulerian simple graph with 2 vertices"
+            )
+        if n == 0:
+            return Graph([], "adjacency_list")
+        if n == 1:
+            return Graph([[]], "adjacency_list")
+
+        max_even = n - 1 if n % 2 == 1 else n - 2
+        rng = np.random.default_rng()
+        seq: list[int] = [2] * n
+        for _ in range(50):
+            candidate = (rng.integers(1, max_even // 2 + 1, size=n) * 2).tolist()
+            if utils.is_graphic_sequence(candidate):
+                seq = candidate
+                break
+
+        graph = Graph.from_sequence(seq)
+        graph.randomize(n * 4)
+
+        comp = graph._components()
+        while max(comp) > 1:
+            adj_sets = [set(neighbors) for neighbors in graph.adjacency_list()]
+            edge_in_c1: tuple[int, int] | None = None
+            edge_in_other: tuple[int, int] | None = None
+            for u, neighbors in enumerate(adj_sets):
+                for v in neighbors:
+                    if u < v:
+                        if comp[u] == 1 and edge_in_c1 is None:
+                            edge_in_c1 = (u, v)
+                        elif comp[u] != 1 and edge_in_other is None:
+                            edge_in_other = (u, v)
+                    if edge_in_c1 is not None and edge_in_other is not None:
+                        break
+                if edge_in_c1 is not None and edge_in_other is not None:
+                    break
+            if edge_in_c1 is None or edge_in_other is None:
+                break
+            a, b = edge_in_c1
+            c, d = edge_in_other
+            adj_sets[a].remove(b)
+            adj_sets[b].remove(a)
+            adj_sets[c].remove(d)
+            adj_sets[d].remove(c)
+            adj_sets[a].add(d)
+            adj_sets[d].add(a)
+            adj_sets[b].add(c)
+            adj_sets[c].add(b)
+            graph._set_from_adjacency_list([sorted(s) for s in adj_sets])
+            comp = graph._components()
+
+        return graph
+
+    def largest_connected_component(self) -> list[int]:
+        if self.vertex_count == 0:
+            return []
+        comp = self._components()
+        counts = Counter(comp)
+        largest_id = max(counts, key=lambda cid: counts[cid])
+        return [v for v, cid in enumerate(comp) if cid == largest_id]
+
+    def find_euler_cycle(self) -> list[int] | None:
+        if self.vertex_count == 0:
+            return []
+        adj = self.adjacency_list()
+        if any(len(neighbors) % 2 != 0 for neighbors in adj):
+            return None
+        comp = self._components()
+        if max(comp) > 1:
+            return None
+        if all(len(neighbors) == 0 for neighbors in adj):
+            return [0]
+
+        rem = [sorted(neighbors) for neighbors in adj]
+
+        def reachable_count(start: int) -> int:
+            visited = {start}
+            queue = deque([start])
+            while queue:
+                curr = queue.popleft()
+                for nxt in rem[curr]:
+                    if nxt not in visited:
+                        visited.add(nxt)
+                        queue.append(nxt)
+            return len(visited)
+
+        def is_bridge(u: int, v: int) -> bool:
+            before = reachable_count(u)
+            rem[u].remove(v)
+            rem[v].remove(u)
+            after = reachable_count(u)
+            rem[u].append(v)
+            rem[v].append(u)
+            rem[u].sort()
+            rem[v].sort()
+            return after < before
+
+        u = 0
+        cycle = [u]
+        while rem[u]:
+            if len(rem[u]) == 1:
+                v = rem[u][0]
+            else:
+                v = rem[u][0]
+                for candidate in rem[u]:
+                    if not is_bridge(u, candidate):
+                        v = candidate
+                        break
+            rem[u].remove(v)
+            rem[v].remove(u)
+            u = v
+            cycle.append(u)
+
+        return cycle
+
+    def is_hamiltonian(self) -> bool:
+        n = self.vertex_count
+        if n < 3:
+            return False
+        adj = self.adjacency_list()
+        if any(len(neighbors) < 2 for neighbors in adj):
+            return False
+        comp = self._components()
+        if max(comp) > 1:
+            return False
+
+        adj_sets = [set(neighbors) for neighbors in adj]
+        stack = [0]
+        visited = [False] * n
+        visited[0] = True
+
+        def backtrack() -> bool:
+            if len(stack) == n:
+                return stack[0] in adj_sets[stack[-1]]
+            last = stack[-1]
+            for neighbor in adj[last]:
+                if not visited[neighbor]:
+                    visited[neighbor] = True
+                    stack.append(neighbor)
+                    if backtrack():
+                        return True
+                    stack.pop()
+                    visited[neighbor] = False
+            return False
+
+        return backtrack()
