@@ -10,7 +10,7 @@ DEFAULT_FILE = Path(__file__).parent / "data" / "graph_adj_matrix.txt"
 def _format_adjacency_list(adj_list: list[list[int]]) -> str:
     return "\n".join(
         f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip()
-        for u, neighbors in enumerate(adj_list)
+        for u, neighbors in enumerate(adj_list, start=1)
     )
 
 

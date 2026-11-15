@@ -131,6 +131,9 @@ class Graph:
             cast(AdjacencyMatrix, self.data)
         )
 
+    def _zero_based_adj(self) -> AdjacencyList:
+        return [[v - 1 for v in neighbors] for neighbors in self.adjacency_list()]
+
     def _set_from_adjacency_list(self, adj: AdjacencyList) -> None:
         if self.data_type == "adjacency_list":
             self.data = adj
@@ -139,8 +142,11 @@ class Graph:
         else:
             self.data = convert.adjacency_list_to_incidence_matrix(adj)
 
+    def _set_from_zero_based_adj(self, adj: AdjacencyList) -> None:
+        self._set_from_adjacency_list([[v + 1 for v in neighbors] for neighbors in adj])
+
     def _components(self) -> list[int]:
-        adj = self.adjacency_list()
+        adj = self._zero_based_adj()
         n = self.vertex_count
         if n >= 900:
             sys.setrecursionlimit(max(sys.getrecursionlimit(), n + 100))
@@ -180,7 +186,10 @@ class Graph:
                 adj[u].append(v)
                 adj[v].append(u)
 
-        return Graph(adj, "adjacency_list")
+        return Graph(
+            [[v + 1 for v in neighbors] for neighbors in adj],
+            "adjacency_list",
+        )
 
     def randomize(self, n: int) -> None:
         if n < 0:
@@ -188,7 +197,7 @@ class Graph:
         if n == 0:
             return
 
-        adj = self.adjacency_list()
+        adj = self._zero_based_adj()
         adj_sets = [set(neighbors) for neighbors in adj]
         edges: list[tuple[int, int]] = [
             (u, v) for u, neighbors in enumerate(adj) for v in neighbors if u < v
@@ -245,7 +254,7 @@ class Graph:
                 if not found_any:
                     break
 
-        self._set_from_adjacency_list([sorted(neighbors) for neighbors in adj_sets])
+        self._set_from_zero_based_adj([sorted(neighbors) for neighbors in adj_sets])
 
     @staticmethod
     def create_random_k_regular(n: int, k: int) -> "Graph":
@@ -290,7 +299,7 @@ class Graph:
 
         comp = graph._components()
         while max(comp) > 1:
-            adj_sets = [set(neighbors) for neighbors in graph.adjacency_list()]
+            adj_sets = [set(neighbors) for neighbors in graph._zero_based_adj()]
             edge_in_c1: tuple[int, int] | None = None
             edge_in_other: tuple[int, int] | None = None
             for u, neighbors in enumerate(adj_sets):
@@ -316,7 +325,7 @@ class Graph:
             adj_sets[d].add(a)
             adj_sets[b].add(c)
             adj_sets[c].add(b)
-            graph._set_from_adjacency_list([sorted(s) for s in adj_sets])
+            graph._set_from_zero_based_adj([sorted(s) for s in adj_sets])
             comp = graph._components()
 
         return graph
@@ -327,19 +336,19 @@ class Graph:
         comp = self._components()
         counts = Counter(comp)
         largest_id = max(counts, key=lambda cid: counts[cid])
-        return [v for v, cid in enumerate(comp) if cid == largest_id]
+        return [v + 1 for v, cid in enumerate(comp) if cid == largest_id]
 
     def find_euler_cycle(self) -> list[int] | None:
         if self.vertex_count == 0:
             return []
-        adj = self.adjacency_list()
+        adj = self._zero_based_adj()
         if any(len(neighbors) % 2 != 0 for neighbors in adj):
             return None
         comp = self._components()
         if max(comp) > 1:
             return None
         if all(len(neighbors) == 0 for neighbors in adj):
-            return [0]
+            return [1]
 
         rem = [sorted(neighbors) for neighbors in adj]
 
@@ -381,13 +390,13 @@ class Graph:
             u = v
             cycle.append(u)
 
-        return cycle
+        return [v + 1 for v in cycle]
 
     def is_hamiltonian(self) -> bool:
         n = self.vertex_count
         if n < 3:
             return False
-        adj = self.adjacency_list()
+        adj = self._zero_based_adj()
         if any(len(neighbors) < 2 for neighbors in adj):
             return False
         comp = self._components()

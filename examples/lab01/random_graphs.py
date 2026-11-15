@@ -5,7 +5,7 @@ from graphs import Graph, visualize
 
 def _print_graph(graph: Graph) -> None:
     print("Adjacency list:")
-    for u, neighbors in enumerate(graph.adjacency_list()):
+    for u, neighbors in enumerate(graph.adjacency_list(), start=1):
         print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
     print("\nAdjacency matrix:")
     print(graph.adjacency_matrix())

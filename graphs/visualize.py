@@ -32,11 +32,12 @@ def on_circle(
             positions.append((x, y))
 
         adj = graph.adjacency_list()
-        for u, neighbors in enumerate(adj):
-            x1, y1 = positions[u]
+        for u_idx, neighbors in enumerate(adj):
+            x1, y1 = positions[u_idx]
             for v in neighbors:
-                if u < v:
-                    x2, y2 = positions[v]
+                v_idx = v - 1
+                if u_idx < v_idx:
+                    x2, y2 = positions[v_idx]
                     canvas.create_line(x1, y1, x2, y2, fill="#334155", width=2)
 
         for i, (x, y) in enumerate(positions):
@@ -52,7 +53,7 @@ def on_circle(
             canvas.create_text(
                 x,
                 y,
-                text=str(i),
+                text=str(i + 1),
                 fill="white",
                 font=("TkDefaultFont", 11, "bold"),
             )

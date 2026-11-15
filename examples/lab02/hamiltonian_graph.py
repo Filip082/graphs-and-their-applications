@@ -8,14 +8,14 @@ from graphs import Graph, GraphType, visualize
 def _default_graph() -> Graph:
     return Graph(
         [
-            [1, 4, 6],
-            [0, 2, 5, 7],
+            [2, 5, 7],
+            [1, 3, 6, 8],
+            [2, 4, 7],
+            [3, 5, 6, 8],
+            [1, 4, 8],
+            [2, 4, 7, 8],
             [1, 3, 6],
-            [2, 4, 5, 7],
-            [0, 3, 7],
-            [1, 3, 6, 7],
-            [0, 2, 5],
-            [1, 3, 4, 5],
+            [2, 4, 5, 6],
         ],
         "adjacency_list",
     )
@@ -60,7 +60,7 @@ def main() -> None:
         graph = _default_graph()
 
     print("Adjacency list:")
-    for u, neighbors in enumerate(graph.adjacency_list()):
+    for u, neighbors in enumerate(graph.adjacency_list(), start=1):
         print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
 
     print(f"\nIs Hamiltonian: {graph.is_hamiltonian()}")

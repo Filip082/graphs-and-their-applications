@@ -6,7 +6,7 @@ from graphs import Graph, visualize
 
 
 def test_on_circle_draws_vertices_and_edges() -> None:
-    g = Graph([[1, 2], [0], [0], []], "adjacency_list")
+    g = Graph([[2, 3], [1], [1], []], "adjacency_list")
     try:
         root = visualize.on_circle(g, show=False)
     except tk.TclError:

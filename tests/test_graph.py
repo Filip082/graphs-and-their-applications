@@ -7,7 +7,7 @@ from graphs import Graph
 
 
 def test_graph_members_and_conversions() -> None:
-    adj_list = [[1, 2], [0], [0]]
+    adj_list = [[2, 3], [1], [1]]
     g = Graph(adj_list, "adjacency_list")
 
     assert g.vertex_count == 3
@@ -39,22 +39,22 @@ def test_graph_members_and_conversions() -> None:
 
 def test_graph_from_file(tmp_path: Path) -> None:
     adj_list_file = tmp_path / "adj_list.txt"
-    adj_list_file.write_text("0: 1 2\n1: 0\n2: 0\n3:\n", encoding="utf-8")
+    adj_list_file.write_text("1: 2 3\n2: 1\n3: 1\n4:\n", encoding="utf-8")
     g1 = Graph.from_file(adj_list_file, "adjacency_list")
     assert g1.vertex_count == 4
-    assert g1.adjacency_list() == [[1, 2], [0], [0], []]
+    assert g1.adjacency_list() == [[2, 3], [1], [1], []]
 
     adj_mat_file = tmp_path / "adj_mat.txt"
     adj_mat_file.write_text("0 1 0\n1 0 1\n0 1 0\n", encoding="utf-8")
     g2 = Graph.from_file(adj_mat_file, "adjacency_matrix")
     assert g2.vertex_count == 3
-    assert g2.adjacency_list() == [[1], [0, 2], [1]]
+    assert g2.adjacency_list() == [[2], [1, 3], [2]]
 
     inc_mat_file = tmp_path / "inc_mat.txt"
     inc_mat_file.write_text("1 0\n1 1\n0 1\n", encoding="utf-8")
     g3 = Graph.from_file(inc_mat_file, "incidence_matrix")
     assert g3.vertex_count == 3
-    assert g3.adjacency_list() == [[1], [0, 2], [1]]
+    assert g3.adjacency_list() == [[2], [1, 3], [2]]
 
 
 def test_random_binomial() -> None:

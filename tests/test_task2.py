@@ -88,7 +88,7 @@ def _verify_euler_cycle(graph: Graph, cycle: list[int]) -> None:
     adj = graph.adjacency_list()
     expected_edges = {
         (min(u, v), max(u, v))
-        for u, neighbors in enumerate(adj)
+        for u, neighbors in enumerate(adj, start=1)
         for v in neighbors
         if u < v
     }
@@ -96,7 +96,7 @@ def _verify_euler_cycle(graph: Graph, cycle: list[int]) -> None:
     assert len(cycle) == len(expected_edges) + 1
     traversed: list[tuple[int, int]] = []
     for u, v in zip(cycle[:-1], cycle[1:], strict=True):
-        assert v in adj[u]
+        assert v in adj[u - 1]
         traversed.append((min(u, v), max(u, v)))
     assert len(traversed) == len(set(traversed))
     assert set(traversed) == expected_edges
@@ -104,7 +104,7 @@ def _verify_euler_cycle(graph: Graph, cycle: list[int]) -> None:
 
 def test_create_random_eulerian_and_find_euler_cycle() -> None:
     assert Graph.create_random_eulerian(0).find_euler_cycle() == []
-    assert Graph.create_random_eulerian(1).find_euler_cycle() == [0]
+    assert Graph.create_random_eulerian(1).find_euler_cycle() == [1]
 
     for n in (3, 4, 5, 6, 8, 10):
         g = Graph.create_random_eulerian(n)
@@ -116,18 +116,18 @@ def test_create_random_eulerian_and_find_euler_cycle() -> None:
         _verify_euler_cycle(g, cycle)
 
     bowtie = Graph(
-        [[1, 2, 3, 4], [0, 2], [0, 1], [0, 4], [0, 3]],
+        [[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]],
         "adjacency_list",
     )
     bowtie_cycle = bowtie.find_euler_cycle()
     assert bowtie_cycle is not None
     _verify_euler_cycle(bowtie, bowtie_cycle)
 
-    odd_graph = Graph([[1], [0, 2], [1]], "adjacency_list")
+    odd_graph = Graph([[2], [1, 3], [2]], "adjacency_list")
     assert odd_graph.find_euler_cycle() is None
 
     disconnected_even = Graph(
-        [[1, 2], [0, 2], [0, 1], [4, 5], [3, 5], [3, 4]],
+        [[2, 3], [1, 3], [1, 2], [5, 6], [4, 6], [4, 5]],
         "adjacency_list",
     )
     assert disconnected_even.find_euler_cycle() is None
@@ -140,44 +140,44 @@ def test_create_random_eulerian_and_find_euler_cycle() -> None:
 
 def test_largest_connected_component() -> None:
     assert Graph([], "adjacency_list").largest_connected_component() == []
-    assert Graph([[]], "adjacency_list").largest_connected_component() == [0]
+    assert Graph([[]], "adjacency_list").largest_connected_component() == [1]
 
     g = Graph(
-        [[1], [0], [3, 4], [2, 4], [2, 3], []],
+        [[2], [1], [4, 5], [3, 5], [3, 4], []],
         "adjacency_list",
     )
-    assert g.largest_connected_component() == [2, 3, 4]
+    assert g.largest_connected_component() == [3, 4, 5]
 
 
 def test_is_hamiltonian() -> None:
     assert Graph([], "adjacency_list").is_hamiltonian() is False
     assert Graph([[]], "adjacency_list").is_hamiltonian() is False
-    assert Graph([[1], [0]], "adjacency_list").is_hamiltonian() is False
+    assert Graph([[2], [1]], "adjacency_list").is_hamiltonian() is False
 
-    c4 = Graph([[1, 3], [0, 2], [1, 3], [0, 2]], "adjacency_list")
+    c4 = Graph([[2, 4], [1, 3], [2, 4], [1, 3]], "adjacency_list")
     assert c4.is_hamiltonian() is True
 
     k5 = Graph.create_random_k_regular(5, 4)
     assert k5.is_hamiltonian() is True
 
     bowtie = Graph(
-        [[1, 2, 3, 4], [0, 2], [0, 1], [0, 4], [0, 3]],
+        [[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]],
         "adjacency_list",
     )
     assert bowtie.is_hamiltonian() is False
 
     petersen = Graph(
         [
-            [1, 4, 5],
-            [0, 2, 6],
+            [2, 5, 6],
             [1, 3, 7],
             [2, 4, 8],
-            [0, 3, 9],
-            [0, 7, 8],
+            [3, 5, 9],
+            [1, 4, 10],
             [1, 8, 9],
-            [2, 5, 9],
-            [3, 5, 6],
+            [2, 9, 10],
+            [3, 6, 10],
             [4, 6, 7],
+            [5, 7, 8],
         ],
         "adjacency_list",
     )

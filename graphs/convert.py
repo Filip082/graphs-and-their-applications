@@ -14,13 +14,14 @@ def _validate_adjacency_list(adjacency_list: Sequence[Sequence[int]]) -> Adjacen
     normalized: AdjacencyList = []
     neighbor_sets: list[set[int]] = []
 
-    for u, neighbors in enumerate(adjacency_list):
+    for idx, neighbors in enumerate(adjacency_list):
+        u = idx + 1
         seen: set[int] = set()
         for v in neighbors:
             if isinstance(v, bool) or not isinstance(v, (int, np.integer)):
                 raise ValueError(f"Invalid vertex index: {v!r}")
             vi = int(v)
-            if vi < 0 or vi >= n:
+            if vi < 1 or vi > n:
                 raise ValueError(f"Vertex index out of range: {vi}")
             if vi == u:
                 raise ValueError(f"Self-loop detected at vertex {u}")
@@ -30,9 +31,10 @@ def _validate_adjacency_list(adjacency_list: Sequence[Sequence[int]]) -> Adjacen
         neighbor_sets.append(seen)
         normalized.append(sorted(seen))
 
-    for u, seen in enumerate(neighbor_sets):
+    for idx, seen in enumerate(neighbor_sets):
+        u = idx + 1
         for v in seen:
-            if u not in neighbor_sets[v]:
+            if u not in neighbor_sets[v - 1]:
                 raise ValueError(f"Asymmetric edge between {u} and {v}")
 
     return normalized
@@ -76,9 +78,9 @@ def adjacency_list_to_adjacency_matrix(
     adj = _validate_adjacency_list(adjacency_list)
     n = len(adj)
     matrix = np.zeros((n, n), dtype=np.int64)
-    for u, neighbors in enumerate(adj):
+    for u_idx, neighbors in enumerate(adj):
         for v in neighbors:
-            matrix[u, v] = 1
+            matrix[u_idx, v - 1] = 1
     return matrix
 
 
@@ -87,11 +89,16 @@ def adjacency_list_to_incidence_matrix(
 ) -> IncidenceMatrix:
     adj = _validate_adjacency_list(adjacency_list)
     n = len(adj)
-    edges = [(u, v) for u, neighbors in enumerate(adj) for v in neighbors if u < v]
+    edges = [
+        (u_idx, v - 1)
+        for u_idx, neighbors in enumerate(adj)
+        for v in neighbors
+        if u_idx < v - 1
+    ]
     matrix = np.zeros((n, len(edges)), dtype=np.int64)
-    for edge_idx, (u, v) in enumerate(edges):
-        matrix[u, edge_idx] = 1
-        matrix[v, edge_idx] = 1
+    for edge_idx, (u_idx, v_idx) in enumerate(edges):
+        matrix[u_idx, edge_idx] = 1
+        matrix[v_idx, edge_idx] = 1
     return matrix
 
 
@@ -99,7 +106,7 @@ def adjacency_matrix_to_adjacency_list(
     adjacency_matrix: MatrixInput,
 ) -> AdjacencyList:
     matrix = _validate_adjacency_matrix(adjacency_matrix)
-    return [np.flatnonzero(row).astype(int).tolist() for row in matrix]
+    return [(np.flatnonzero(row) + 1).astype(int).tolist() for row in matrix]
 
 
 def incidence_matrix_to_adjacency_list(
@@ -110,8 +117,8 @@ def incidence_matrix_to_adjacency_list(
     adj: AdjacencyList = [[] for _ in range(n)]
     for e in range(m):
         u, v = np.flatnonzero(matrix[:, e])
-        adj[int(u)].append(int(v))
-        adj[int(v)].append(int(u))
+        adj[int(u)].append(int(v) + 1)
+        adj[int(v)].append(int(u) + 1)
     for neighbors in adj:
         neighbors.sort()
     return adj

@@ -24,7 +24,7 @@ def main() -> None:
     adj = graph.adjacency_list()
     print(f"Generated random Eulerian graph on {args.n} vertices:")
     print(f"Degrees: {[len(neighbors) for neighbors in adj]}")
-    for u, neighbors in enumerate(adj):
+    for u, neighbors in enumerate(adj, start=1):
         print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
 
     cycle = graph.find_euler_cycle()

@@ -9,10 +9,10 @@ from graphs import convert
 @pytest.fixture
 def sample_adj_list() -> list[list[int]]:
     return [
-        [1, 2],
-        [0, 2],
-        [0, 1, 3],
-        [2],
+        [2, 3],
+        [1, 3],
+        [1, 2, 4],
+        [3],
     ]
 
 
@@ -103,12 +103,12 @@ def test_empty_and_edgeless_graphs() -> None:
 
 
 def test_unsorted_adjacency_list_normalized() -> None:
-    unsorted = [[2, 1], [2, 0], [1, 0]]
+    unsorted = [[3, 2], [3, 1], [2, 1]]
     inc = convert.adjacency_list_to_incidence_matrix(unsorted)
     assert convert.incidence_matrix_to_adjacency_list(inc) == [
+        [2, 3],
+        [1, 3],
         [1, 2],
-        [0, 2],
-        [0, 1],
     ]
 
 
@@ -116,9 +116,10 @@ def test_unsorted_adjacency_list_normalized() -> None:
     "bad_list",
     [
         [[0]],
-        [[1], []],
+        [[1]],
         [[2], []],
-        [[1, 1], [0]],
+        [[3], []],
+        [[2, 2], [1]],
         [[True], []],
     ],
 )
