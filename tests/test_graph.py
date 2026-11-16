@@ -727,3 +727,150 @@ def test_random_generators_directed() -> None:
     assert int(np.count_nonzero(g_uni_conn.adjacency_matrix())) == 5
     assert _is_weakly_connected(g_uni_conn)
     _assert_weights_in_range(g_uni_conn)
+
+
+def _task4_example_graph() -> Graph:
+    return Graph(
+        [
+            [Neighbor(2, 6), Neighbor(3, 3), Neighbor(5, -1)],
+            [
+                Neighbor(1, 10),
+                Neighbor(3, -5),
+                Neighbor(4, -4),
+                Neighbor(5, 4),
+                Neighbor(7, 4),
+            ],
+            [Neighbor(6, 2)],
+            [Neighbor(2, 5), Neighbor(7, 9)],
+            [Neighbor(7, -4)],
+            [Neighbor(2, 9)],
+            [Neighbor(6, 4)],
+        ],
+        "adjacency_list",
+    )
+
+
+def test_kosaraju() -> None:
+    g_task4 = _task4_example_graph()
+    assert g_task4.kosaraju() == [[1, 2, 3, 4, 5, 6, 7]]
+    assert Graph(g_task4.adjacency_matrix(), "adjacency_matrix").kosaraju() == [
+        [1, 2, 3, 4, 5, 6, 7]
+    ]
+
+    g_multi = Graph(
+        [
+            [Neighbor(2, 1)],
+            [Neighbor(3, 1)],
+            [Neighbor(1, 1), Neighbor(4, 1)],
+            [Neighbor(5, 1)],
+            [Neighbor(4, 1)],
+            [],
+        ],
+        "adjacency_list",
+    )
+    sccs = {tuple(comp) for comp in g_multi.kosaraju()}
+    assert sccs == {(1, 2, 3), (4, 5), (6,)}
+
+    assert Graph([], "adjacency_list").kosaraju() == []
+    assert Graph([[]], "adjacency_list").kosaraju() == [[1]]
+
+
+def test_bellman_ford() -> None:
+    g_task4 = _task4_example_graph()
+    res = g_task4.bellman_ford(1)
+    assert res[1] == (0, [1])
+    assert res[2] == (6, [1, 2])
+    assert res[3] == (1, [1, 2, 3])
+    assert res[4] == (2, [1, 2, 4])
+    assert res[5] == (-1, [1, 5])
+    assert res[6] == (-1, [1, 5, 7, 6])
+    assert res[7] == (-5, [1, 5, 7])
+
+    g_disconnected = Graph(
+        [[Neighbor(2, -3)], [], [Neighbor(4, 2)], []],
+        "adjacency_list",
+    )
+    assert g_disconnected.bellman_ford(1) == {
+        1: (0, [1]),
+        2: (-3, [1, 2]),
+        3: (math.inf, []),
+        4: (math.inf, []),
+    }
+
+    g_neg_cycle = Graph(
+        [
+            [Neighbor(2, 1)],
+            [Neighbor(3, -2)],
+            [Neighbor(1, -1)],
+            [Neighbor(1, 5)],
+        ],
+        "adjacency_list",
+    )
+    with pytest.raises(ValueError):
+        g_neg_cycle.bellman_ford(1)
+
+    g_unreachable_neg = Graph(
+        [
+            [Neighbor(2, 3)],
+            [],
+            [Neighbor(4, -2)],
+            [Neighbor(3, -1)],
+        ],
+        "adjacency_list",
+    )
+    assert g_unreachable_neg.bellman_ford(1) == {
+        1: (0, [1]),
+        2: (3, [1, 2]),
+        3: (math.inf, []),
+        4: (math.inf, []),
+    }
+
+    for bad in (0, -1, 5, True):
+        with pytest.raises(ValueError):
+            g_disconnected.bellman_ford(bad)
+
+
+def test_johnson() -> None:
+    g_task4 = _task4_example_graph()
+    expected = np.array(
+        [
+            [0, 6, 1, 2, -1, -1, -5],
+            [10, 0, -5, -4, 4, -3, 0],
+            [21, 11, 0, 7, 15, 2, 11],
+            [15, 5, 0, 0, 9, 2, 5],
+            [19, 9, 4, 5, 0, 0, -4],
+            [19, 9, 4, 5, 13, 0, 9],
+            [23, 13, 8, 9, 17, 4, 0],
+        ],
+        dtype=np.float64,
+    )
+    np.testing.assert_array_equal(g_task4.johnson(), expected)
+    np.testing.assert_array_equal(
+        Graph(g_task4.adjacency_matrix(), "adjacency_matrix").johnson(), expected
+    )
+
+    g_dag = Graph(
+        [[Neighbor(2, 4), Neighbor(3, 1)], [Neighbor(3, -5)], []],
+        "adjacency_list",
+    )
+    expected_dag = np.array(
+        [
+            [0, 4, -1],
+            [math.inf, 0, -5],
+            [math.inf, math.inf, 0],
+        ],
+        dtype=np.float64,
+    )
+    np.testing.assert_array_equal(g_dag.johnson(), expected_dag)
+
+    g_neg_cycle = Graph(
+        [[Neighbor(2, 2)], [Neighbor(1, -3)]],
+        "adjacency_list",
+    )
+    with pytest.raises(ValueError):
+        g_neg_cycle.johnson()
+
+    assert Graph([], "adjacency_list").johnson().shape == (0, 0)
+    np.testing.assert_array_equal(
+        Graph([[]], "adjacency_list").johnson(), np.array([[0.0]])
+    )

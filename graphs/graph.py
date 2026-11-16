@@ -518,13 +518,30 @@ class Graph:
 
         return backtrack(0, 1)
 
-    def dijkstra(self, n: int) -> dict[int, tuple[int | float, list[int]]]:
-        if isinstance(n, bool) or not isinstance(n, int):
-            raise ValueError(f"Vertex n must be an int, got {n!r}")
-        if n < 1 or n > self.vertex_count:
+    def _validate_vertex(self, v: int, name: str = "n") -> None:
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ValueError(f"Vertex {name} must be an int, got {v!r}")
+        if v < 1 or v > self.vertex_count:
             raise ValueError(
-                f"Start vertex n must be between 1 and {self.vertex_count}, got {n}"
+                f"Start vertex {name} must be between 1 and {self.vertex_count}, "
+                f"got {v}"
             )
+
+    @staticmethod
+    def _build_path(
+        dist: Sequence[int | float], prev: Sequence[int | None], v: int
+    ) -> list[int]:
+        if dist[v] == math.inf:
+            return []
+        path: list[int] = []
+        curr: int | None = v
+        while curr is not None:
+            path.append(curr + 1)
+            curr = prev[curr]
+        return path[::-1]
+
+    def dijkstra(self, n: int) -> dict[int, tuple[int | float, list[int]]]:
+        self._validate_vertex(n, "n")
 
         adj = self.adjacency_list()
         if any(nb.w < 0 for nbs in adj for nb in nbs):
@@ -553,17 +570,143 @@ class Graph:
                     dist[v] = dist[u] + neighbor.w
                     prev[v] = u
 
-        def build_path(v: int) -> list[int]:
-            if dist[v] == math.inf:
-                return []
-            path: list[int] = []
-            curr: int | None = v
-            while curr is not None:
-                path.append(curr + 1)
-                curr = prev[curr]
-            return path[::-1]
+        return {v + 1: (dist[v], self._build_path(dist, prev, v)) for v in range(count)}
 
-        return {v + 1: (dist[v], build_path(v)) for v in range(count)}
+    def kosaraju(self) -> list[list[int]]:
+        count = self.vertex_count
+        if count == 0:
+            return []
+
+        adj = self._zero_based_adj()
+        d = [-1] * count
+        f = [-1] * count
+        t = 0
+        order: list[int] = []
+
+        def dfs_visit(v: int) -> None:
+            nonlocal t
+            t += 1
+            d[v] = t
+            for u in adj[v]:
+                if d[u] == -1:
+                    dfs_visit(u)
+            t += 1
+            f[v] = t
+            order.append(v)
+
+        for v in range(count):
+            if d[v] == -1:
+                dfs_visit(v)
+
+        adj_t: list[list[int]] = [[] for _ in range(count)]
+        for u, nbs in enumerate(adj):
+            for v in nbs:
+                adj_t[v].append(u)
+
+        comp = [-1] * count
+        nr = 0
+
+        def components_r(cid: int, v: int) -> None:
+            for u in adj_t[v]:
+                if comp[u] == -1:
+                    comp[u] = cid
+                    components_r(cid, u)
+
+        for v in reversed(order):
+            if comp[v] == -1:
+                nr += 1
+                comp[v] = nr
+                components_r(nr, v)
+
+        groups: list[list[int]] = [[] for _ in range(nr)]
+        for v_idx, cid in enumerate(comp):
+            groups[cid - 1].append(v_idx + 1)
+        return groups
+
+    @staticmethod
+    def _bellman_ford_raw(
+        adj: list[list[tuple[int, int]]], start: int
+    ) -> tuple[list[int | float], list[int | None]]:
+        count = len(adj)
+        dist: list[int | float] = [math.inf] * count
+        prev: list[int | None] = [None] * count
+        dist[start] = 0
+
+        for _ in range(count - 1):
+            updated = False
+            for u, nbs in enumerate(adj):
+                du = dist[u]
+                if du == math.inf:
+                    continue
+                for v, w in nbs:
+                    if du + w < dist[v]:
+                        dist[v] = du + w
+                        prev[v] = u
+                        updated = True
+            if not updated:
+                break
+
+        for u, nbs in enumerate(adj):
+            du = dist[u]
+            if du == math.inf:
+                continue
+            for v, w in nbs:
+                if du + w < dist[v]:
+                    raise ValueError(
+                        "Graph contains a negative-weight cycle reachable from source"
+                    )
+
+        return dist, prev
+
+    def bellman_ford(self, s: int) -> dict[int, tuple[int | float, list[int]]]:
+        self._validate_vertex(s, "s")
+        adj = [[(nb.v - 1, nb.w) for nb in nbs] for nbs in self.adjacency_list()]
+        dist, prev = self._bellman_ford_raw(adj, s - 1)
+        return {
+            v + 1: (dist[v], self._build_path(dist, prev, v))
+            for v in range(self.vertex_count)
+        }
+
+    @staticmethod
+    def _dijkstra_distances(
+        adj: list[list[tuple[int, int]]], start: int
+    ) -> list[int | float]:
+        count = len(adj)
+        dist: list[int | float] = [math.inf] * count
+        dist[start] = 0
+        heap: list[tuple[int | float, int]] = [(0, start)]
+
+        while heap:
+            du, u = heapq.heappop(heap)
+            if du > dist[u]:
+                continue
+            for v, w in adj[u]:
+                cand = du + w
+                if cand < dist[v]:
+                    dist[v] = cand
+                    heapq.heappush(heap, (cand, v))
+
+        return dist
+
+    def johnson(self) -> NDArray[np.float64]:
+        count = self.vertex_count
+        if count == 0:
+            return np.zeros((0, 0), dtype=np.float64)
+
+        adj = [[(nb.v - 1, nb.w) for nb in nbs] for nbs in self.adjacency_list()]
+        adj.append([(v, 0) for v in range(count)])
+
+        h, _ = self._bellman_ford_raw(adj, count)
+        adj_hat = [
+            [(v, w + int(h[u]) - int(h[v])) for v, w in adj[u]] for u in range(count)
+        ]
+
+        matrix = np.zeros((count, count), dtype=np.float64)
+        for u in range(count):
+            d_hat = self._dijkstra_distances(adj_hat, u)
+            for v in range(count):
+                matrix[u, v] = d_hat[v] - h[u] + h[v]
+        return matrix
 
     def distance_matrix(self) -> NDArray[np.int64]:
         count = self.vertex_count
