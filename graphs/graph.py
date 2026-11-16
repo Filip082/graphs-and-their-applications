@@ -621,3 +621,17 @@ class Graph:
             path.reverse()
             paths[v + 1] = (dist[v], path)
         return paths
+
+    def distance_matrix(self) -> NDArray[np.int64]:
+        count = self.vertex_count
+        matrix = np.zeros((count, count), dtype=np.int64)
+        for u in range(1, count + 1):
+            paths = self.dijkstra(u)
+            for v in range(1, count + 1):
+                dist = paths[v][0]
+                if math.isinf(dist):
+                    raise ValueError(
+                        "Cannot compute distance matrix for a disconnected graph"
+                    )
+                matrix[u - 1, v - 1] = int(dist)
+        return matrix

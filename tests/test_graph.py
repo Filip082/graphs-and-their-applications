@@ -430,3 +430,76 @@ def test_dijkstra_edge_cases() -> None:
     neg = Graph([[Neighbor(2, -1)], [Neighbor(1, -1)]], "adjacency_list")
     with pytest.raises(ValueError):
         neg.dijkstra(1)
+
+
+def test_distance_matrix_task3_example() -> None:
+    adj_list = [
+        [Neighbor(2, 3), Neighbor(3, 2), Neighbor(5, 9)],
+        [Neighbor(1, 3), Neighbor(4, 2), Neighbor(5, 4)],
+        [Neighbor(1, 2), Neighbor(5, 6), Neighbor(6, 9)],
+        [Neighbor(2, 2), Neighbor(7, 3)],
+        [
+            Neighbor(1, 9),
+            Neighbor(2, 4),
+            Neighbor(3, 6),
+            Neighbor(7, 1),
+            Neighbor(8, 2),
+        ],
+        [Neighbor(3, 9), Neighbor(8, 1), Neighbor(9, 2)],
+        [Neighbor(4, 3), Neighbor(5, 1), Neighbor(10, 5)],
+        [
+            Neighbor(5, 2),
+            Neighbor(6, 1),
+            Neighbor(10, 5),
+            Neighbor(11, 6),
+            Neighbor(12, 9),
+        ],
+        [Neighbor(6, 2), Neighbor(11, 2)],
+        [Neighbor(7, 5), Neighbor(8, 5), Neighbor(12, 5)],
+        [Neighbor(8, 6), Neighbor(9, 2), Neighbor(12, 3)],
+        [Neighbor(8, 9), Neighbor(10, 5), Neighbor(11, 3)],
+    ]
+    expected = np.array(
+        [
+            [0, 3, 2, 5, 7, 10, 8, 9, 12, 13, 14, 17],
+            [3, 0, 5, 2, 4, 7, 5, 6, 9, 10, 11, 14],
+            [2, 5, 0, 7, 6, 9, 7, 8, 11, 12, 13, 16],
+            [5, 2, 7, 0, 4, 7, 3, 6, 9, 8, 11, 13],
+            [7, 4, 6, 4, 0, 3, 1, 2, 5, 6, 7, 10],
+            [10, 7, 9, 7, 3, 0, 4, 1, 2, 6, 4, 7],
+            [8, 5, 7, 3, 1, 4, 0, 3, 6, 5, 8, 10],
+            [9, 6, 8, 6, 2, 1, 3, 0, 3, 5, 5, 8],
+            [12, 9, 11, 9, 5, 2, 6, 3, 0, 8, 2, 5],
+            [13, 10, 12, 8, 6, 6, 5, 5, 8, 0, 8, 5],
+            [14, 11, 13, 11, 7, 4, 8, 5, 2, 8, 0, 3],
+            [17, 14, 16, 13, 10, 7, 10, 8, 5, 5, 3, 0],
+        ],
+        dtype=np.int64,
+    )
+
+    g = Graph(adj_list, "adjacency_list")
+    np.testing.assert_array_equal(g.distance_matrix(), expected)
+
+
+def test_distance_matrix_edge_cases() -> None:
+    empty = Graph([], "adjacency_list")
+    np.testing.assert_array_equal(
+        empty.distance_matrix(), np.zeros((0, 0), dtype=np.int64)
+    )
+
+    single = Graph([[]], "adjacency_list")
+    np.testing.assert_array_equal(
+        single.distance_matrix(), np.zeros((1, 1), dtype=np.int64)
+    )
+
+    disconnected = Graph(
+        [
+            [Neighbor(2, 4)],
+            [Neighbor(1, 4)],
+            [Neighbor(4, 2)],
+            [Neighbor(3, 2)],
+        ],
+        "adjacency_list",
+    )
+    with pytest.raises(ValueError):
+        disconnected.distance_matrix()
