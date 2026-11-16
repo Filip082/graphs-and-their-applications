@@ -699,3 +699,31 @@ def test_digraph_dijkstra_positive_weights() -> None:
         2: (math.inf, []),
         3: (0, [3]),
     }
+
+
+def _is_weakly_connected(graph: Graph) -> bool:
+    mat = graph.adjacency_matrix()
+    sym = ((mat != 0) | (mat.T != 0)).astype(np.int64)
+    return len(Graph(sym, "adjacency_matrix").connected_components()) == 1
+
+
+def test_random_generators_directed() -> None:
+    g_full = Graph.create_random_binomial(4, 1.0, directed=True)
+    assert int(np.count_nonzero(g_full.adjacency_matrix())) == 12
+    _assert_weights_in_range(g_full)
+
+    g_conn = Graph.create_random_binomial(8, 0.01, connected=True, directed=True)
+    assert _is_weakly_connected(g_conn)
+    _assert_weights_in_range(g_conn)
+
+    g_uni_full = Graph.create_random_uniform(4, 12, directed=True)
+    assert int(np.count_nonzero(g_uni_full.adjacency_matrix())) == 12
+    _assert_weights_in_range(g_uni_full)
+
+    with pytest.raises(ValueError):
+        Graph.create_random_uniform(4, 13, directed=True)
+
+    g_uni_conn = Graph.create_random_uniform(6, 5, connected=True, directed=True)
+    assert int(np.count_nonzero(g_uni_conn.adjacency_matrix())) == 5
+    assert _is_weakly_connected(g_uni_conn)
+    _assert_weights_in_range(g_uni_conn)

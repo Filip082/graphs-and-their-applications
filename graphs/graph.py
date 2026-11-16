@@ -115,13 +115,27 @@ class Graph:
         raise ValueError(f"Unsupported graph data type: {type!r}")
 
     @staticmethod
-    def _random_spanning_tree_indices(n: int, rng: np.random.Generator) -> list[int]:
+    def _candidate_pairs(
+        n: int, directed: bool
+    ) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
+        if directed:
+            return np.nonzero(~np.eye(n, dtype=bool))
+        return np.triu_indices(n, k=1)
+
+    @staticmethod
+    def _random_spanning_tree_indices(
+        n: int, rng: np.random.Generator, directed: bool = False
+    ) -> list[int]:
         perm = rng.permutation(n)
         indices: list[int] = []
         for i in range(1, n):
             a, b = int(perm[i]), int(perm[int(rng.integers(0, i))])
-            u, v = min(a, b), max(a, b)
-            indices.append(u * (2 * n - u - 1) // 2 + (v - u - 1))
+            if directed:
+                u, v = (a, b) if rng.random() < 0.5 else (b, a)
+                indices.append(u * (n - 1) + (v - 1 if v > u else v))
+            else:
+                u, v = min(a, b), max(a, b)
+                indices.append(u * (2 * n - u - 1) // 2 + (v - u - 1))
         return indices
 
     @staticmethod
@@ -130,16 +144,20 @@ class Graph:
         rows: NDArray[np.intp],
         cols: NDArray[np.intp],
         rng: np.random.Generator,
+        directed: bool = False,
     ) -> "Graph":
         matrix = np.zeros((n, n), dtype=np.int64)
         if len(rows) > 0:
             weights = rng.integers(1, 11, size=len(rows), dtype=np.int64)
             matrix[rows, cols] = weights
-            matrix[cols, rows] = weights
+            if not directed:
+                matrix[cols, rows] = weights
         return Graph(matrix, "adjacency_matrix")
 
     @staticmethod
-    def create_random_binomial(n: int, p: float, connected: bool = False) -> "Graph":
+    def create_random_binomial(
+        n: int, p: float, connected: bool = False, directed: bool = False
+    ) -> "Graph":
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         if not 0.0 <= p <= 1.0:
@@ -150,21 +168,24 @@ class Graph:
             return Graph(np.zeros((n, n), dtype=np.int64), "adjacency_matrix")
 
         rng = np.random.default_rng()
-        rows, cols = np.triu_indices(n, k=1)
+        rows, cols = Graph._candidate_pairs(n, directed)
         mask = rng.random(len(rows)) < p
         if connected:
-            mask[Graph._random_spanning_tree_indices(n, rng)] = True
-        return Graph._random_weighted_matrix(n, rows[mask], cols[mask], rng)
+            mask[Graph._random_spanning_tree_indices(n, rng, directed)] = True
+        return Graph._random_weighted_matrix(
+            n, rows[mask], cols[mask], rng, directed=directed
+        )
 
     @staticmethod
     def create_random_uniform(
         n: int,
         l: int,  # noqa: E741
         connected: bool = False,
+        directed: bool = False,
     ) -> "Graph":
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
-        max_edges = n * (n - 1) // 2
+        max_edges = n * (n - 1) if directed else n * (n - 1) // 2
         if l < 0 or l > max_edges:
             raise ValueError(f"Number of edges l must be between 0 and {max_edges}")
         if connected and n >= 2 and l < n - 1:
@@ -176,17 +197,21 @@ class Graph:
             return Graph(np.zeros((n, n), dtype=np.int64), "adjacency_matrix")
 
         rng = np.random.default_rng()
-        rows, cols = np.triu_indices(n, k=1)
+        rows, cols = Graph._candidate_pairs(n, directed)
         if connected and n >= 2:
             mask = np.zeros(len(rows), dtype=bool)
-            mask[Graph._random_spanning_tree_indices(n, rng)] = True
+            mask[Graph._random_spanning_tree_indices(n, rng, directed)] = True
             if l > n - 1:
                 available = np.flatnonzero(~mask)
                 mask[rng.choice(available, size=l - (n - 1), replace=False)] = True
-            return Graph._random_weighted_matrix(n, rows[mask], cols[mask], rng)
+            return Graph._random_weighted_matrix(
+                n, rows[mask], cols[mask], rng, directed=directed
+            )
 
         chosen = rng.choice(len(rows), size=l, replace=False)
-        return Graph._random_weighted_matrix(n, rows[chosen], cols[chosen], rng)
+        return Graph._random_weighted_matrix(
+            n, rows[chosen], cols[chosen], rng, directed=directed
+        )
 
     def adjacency_list(self) -> AdjacencyList:
         if self.data_type == "adjacency_list":
