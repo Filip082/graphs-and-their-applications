@@ -48,7 +48,7 @@ def main() -> None:
 
     print("Adjacency list:")
     for u, neighbors in enumerate(graph.adjacency_list(), start=1):
-        print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
+        print(f"{u}: {' '.join(str(neighbor.v) for neighbor in neighbors)}".rstrip())
 
     print(f"\nIs Hamiltonian: {graph.is_hamiltonian()}")
 

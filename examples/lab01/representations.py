@@ -3,13 +3,14 @@ from pathlib import Path
 from typing import cast
 
 from graphs import Graph, GraphType, visualize
+from graphs.types import AdjacencyList
 
 DEFAULT_FILE = Path(__file__).parent / "data" / "graph_adj_matrix.txt"
 
 
-def _format_adjacency_list(adj_list: list[list[int]]) -> str:
+def _format_adjacency_list(adj_list: AdjacencyList) -> str:
     return "\n".join(
-        f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip()
+        f"{u}: {' '.join(str(neighbor.v) for neighbor in neighbors)}".rstrip()
         for u, neighbors in enumerate(adj_list, start=1)
     )
 

@@ -2,8 +2,12 @@ import tkinter as tk
 
 import pytest
 
-from graphs import Graph, visualize
+from graphs import Graph, Neighbor, visualize
 from graphs.visualize import _compute_layered_columns
+
+
+def _adj(lists: list[list[int]]) -> list[list[Neighbor]]:
+    return [[Neighbor(v, 1) for v in neighbors] for neighbors in lists]
 
 
 def _get_canvas_counts(root: tk.Tk) -> tuple[int, int, int]:
@@ -18,7 +22,7 @@ def _get_canvas_counts(root: tk.Tk) -> tuple[int, int, int]:
 
 
 def test_circular_draws_vertices_and_edges() -> None:
-    g = Graph([[2, 3], [1], [1], []], "adjacency_list")
+    g = Graph(_adj([[2, 3], [1], [1], []]), "adjacency_list")
     try:
         root = visualize.circular(g, show=False)
     except tk.TclError:
@@ -46,7 +50,7 @@ def test_circular_empty_graph() -> None:
 
 
 def test_layered_draws_vertices_and_edges() -> None:
-    g = Graph([[2, 3], [1, 4], [1, 4], [2, 3]], "adjacency_list")
+    g = Graph(_adj([[2, 3], [1, 4], [1, 4], [2, 3]]), "adjacency_list")
     try:
         root = visualize.layered(g, show=False)
     except tk.TclError:
@@ -59,7 +63,7 @@ def test_layered_draws_vertices_and_edges() -> None:
 
 
 def test_layered_disconnected_and_single_vertex() -> None:
-    g = Graph([[2], [1], []], "adjacency_list")
+    g = Graph(_adj([[2], [1], []]), "adjacency_list")
     try:
         root = visualize.layered(g, show=False)
     except tk.TclError:
@@ -98,7 +102,7 @@ def test_layered_empty_graph() -> None:
 
 
 def test_layered_invalid_start_vertex() -> None:
-    g = Graph([[2], [1]], "adjacency_list")
+    g = Graph(_adj([[2], [1]]), "adjacency_list")
     with pytest.raises(ValueError, match="start_vertex"):
         visualize.layered(g, start_vertex=0, show=False)
     with pytest.raises(ValueError, match="start_vertex"):
@@ -106,20 +110,22 @@ def test_layered_invalid_start_vertex() -> None:
 
 
 def test_compute_layered_columns_structure() -> None:
-    adj = [
-        [2, 3, 5],
-        [1, 4, 5],
-        [1, 5, 6],
-        [2, 7],
-        [1, 2, 3, 7, 8],
-        [3, 8, 9],
-        [4, 5, 10],
-        [5, 6, 10, 11, 12],
-        [6, 11],
-        [7, 8, 12],
-        [8, 9, 12],
-        [8, 10, 11],
-    ]
+    adj = _adj(
+        [
+            [2, 3, 5],
+            [1, 4, 5],
+            [1, 5, 6],
+            [2, 7],
+            [1, 2, 3, 7, 8],
+            [3, 8, 9],
+            [4, 5, 10],
+            [5, 6, 10, 11, 12],
+            [6, 11],
+            [7, 8, 12],
+            [8, 9, 12],
+            [8, 10, 11],
+        ]
+    )
     columns = _compute_layered_columns(adj, start_vertex=1)
     assert columns[0] == [1]
     placed = [v for col in columns.values() for v in col]

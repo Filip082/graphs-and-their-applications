@@ -3,11 +3,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from graphs import Graph
+from graphs import Graph, Neighbor
+
+
+def _adj(lists: list[list[int]]) -> list[list[Neighbor]]:
+    return [[Neighbor(v, 1) for v in neighbors] for neighbors in lists]
 
 
 def test_graph_members_and_conversions() -> None:
-    adj_list = [[2, 3], [1], [1]]
+    adj_list = [
+        [Neighbor(2, 1), Neighbor(3, 1)],
+        [Neighbor(1, 1)],
+        [Neighbor(1, 1)],
+    ]
     g = Graph(adj_list, "adjacency_list")
 
     assert g.vertex_count == 3
@@ -21,7 +29,7 @@ def test_graph_members_and_conversions() -> None:
     np.testing.assert_array_equal(g.incidence_matrix(), expected_inc_mat)
 
     returned_list = g.adjacency_list()
-    returned_list[0].append(99)
+    returned_list[0].append(Neighbor(99, 1))
     assert g.adjacency_list() == adj_list
 
     g_mat = Graph(expected_adj_mat, "adjacency_matrix")
@@ -42,19 +50,44 @@ def test_graph_from_file(tmp_path: Path) -> None:
     adj_list_file.write_text("1: 2 3\n2: 1\n3: 1\n4:\n", encoding="utf-8")
     g1 = Graph.from_file(adj_list_file, "adjacency_list")
     assert g1.vertex_count == 4
-    assert g1.adjacency_list() == [[2, 3], [1], [1], []]
+    assert g1.adjacency_list() == _adj([[2, 3], [1], [1], []])
+
+    weighted_adj_list_file = tmp_path / "weighted_adj_list.txt"
+    weighted_adj_list_file.write_text(
+        "1: 2 5 3 -1\n2: 1 5\n3: 1 -1\n4:\n",
+        encoding="utf-8",
+    )
+    g1_w = Graph.from_file(weighted_adj_list_file, "adjacency_list", weighted=True)
+    assert g1_w.vertex_count == 4
+    assert g1_w.adjacency_list() == [
+        [Neighbor(2, 5), Neighbor(3, -1)],
+        [Neighbor(1, 5)],
+        [Neighbor(1, -1)],
+        [],
+    ]
+
+    bad_weighted_file = tmp_path / "bad_weighted.txt"
+    bad_weighted_file.write_text("1: 2 5 3\n2: 1 5\n3: 1 1\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        Graph.from_file(bad_weighted_file, "adjacency_list", weighted=True)
 
     adj_mat_file = tmp_path / "adj_mat.txt"
     adj_mat_file.write_text("0 1 0\n1 0 1\n0 1 0\n", encoding="utf-8")
     g2 = Graph.from_file(adj_mat_file, "adjacency_matrix")
     assert g2.vertex_count == 3
-    assert g2.adjacency_list() == [[2], [1, 3], [2]]
+    assert g2.adjacency_list() == _adj([[2], [1, 3], [2]])
 
     inc_mat_file = tmp_path / "inc_mat.txt"
     inc_mat_file.write_text("1 0\n1 1\n0 1\n", encoding="utf-8")
     g3 = Graph.from_file(inc_mat_file, "incidence_matrix")
     assert g3.vertex_count == 3
-    assert g3.adjacency_list() == [[2], [1, 3], [2]]
+    assert g3.adjacency_list() == _adj([[2], [1, 3], [2]])
+
+
+def _assert_weights_in_range(graph: Graph, low: int = 1, high: int = 10) -> None:
+    for neighbors in graph.adjacency_list():
+        for neighbor in neighbors:
+            assert low <= neighbor.w <= high
 
 
 def test_random_binomial() -> None:
@@ -64,7 +97,9 @@ def test_random_binomial() -> None:
 
     g_full = Graph.create_random_binomial(5, 1.0)
     assert g_full.vertex_count == 5
-    assert int(g_full.adjacency_matrix().sum()) == 20
+    full_matrix = g_full.adjacency_matrix()
+    assert int(np.count_nonzero(full_matrix)) == 20
+    _assert_weights_in_range(g_full)
 
     g_zero = Graph.create_random_binomial(0, 0.5)
     assert g_zero.vertex_count == 0
@@ -79,7 +114,8 @@ def test_random_uniform() -> None:
     g = Graph.create_random_uniform(6, 7)
     assert g.vertex_count == 6
     assert g.incidence_matrix().shape == (6, 7)
-    assert int(g.adjacency_matrix().sum()) == 14
+    assert int(np.count_nonzero(g.adjacency_matrix())) == 14
+    _assert_weights_in_range(g)
 
     g_zero = Graph.create_random_uniform(4, 0)
     assert g_zero.incidence_matrix().shape == (4, 0)
@@ -140,6 +176,7 @@ def test_create_random_k_regular() -> None:
         g = Graph.create_random_k_regular(n, k)
         assert g.vertex_count == n
         assert all(len(neighbors) == k for neighbors in g.adjacency_list())
+        _assert_weights_in_range(g)
 
     for n, k in [(-1, 0), (4, -1), (0, 1), (4, 4), (5, 3)]:
         with pytest.raises(ValueError):
@@ -149,16 +186,16 @@ def test_create_random_k_regular() -> None:
 def _verify_euler_cycle(graph: Graph, cycle: list[int]) -> None:
     adj = graph.adjacency_list()
     expected_edges = {
-        (min(u, v), max(u, v))
+        (min(u, neighbor.v), max(u, neighbor.v))
         for u, neighbors in enumerate(adj, start=1)
-        for v in neighbors
-        if u < v
+        for neighbor in neighbors
+        if u < neighbor.v
     }
     assert cycle[0] == cycle[-1]
     assert len(cycle) == len(expected_edges) + 1
     traversed: list[tuple[int, int]] = []
     for u, v in zip(cycle[:-1], cycle[1:], strict=True):
-        assert v in adj[u - 1]
+        assert any(neighbor.v == v for neighbor in adj[u - 1])
         traversed.append((min(u, v), max(u, v)))
     assert len(traversed) == len(set(traversed))
     assert set(traversed) == expected_edges
@@ -173,23 +210,24 @@ def test_create_random_eulerian_and_find_euler_cycle() -> None:
         assert g.vertex_count == n
         assert all(len(neighbors) % 2 == 0 for neighbors in g.adjacency_list())
         assert len(g.largest_connected_component()) == n
+        _assert_weights_in_range(g)
         cycle = g.find_euler_cycle()
         assert cycle is not None
         _verify_euler_cycle(g, cycle)
 
     bowtie = Graph(
-        [[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]],
+        _adj([[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]]),
         "adjacency_list",
     )
     bowtie_cycle = bowtie.find_euler_cycle()
     assert bowtie_cycle is not None
     _verify_euler_cycle(bowtie, bowtie_cycle)
 
-    odd_graph = Graph([[2], [1, 3], [2]], "adjacency_list")
+    odd_graph = Graph(_adj([[2], [1, 3], [2]]), "adjacency_list")
     assert odd_graph.find_euler_cycle() is None
 
     disconnected_even = Graph(
-        [[2, 3], [1, 3], [1, 2], [5, 6], [4, 6], [4, 5]],
+        _adj([[2, 3], [1, 3], [1, 2], [5, 6], [4, 6], [4, 5]]),
         "adjacency_list",
     )
     assert disconnected_even.find_euler_cycle() is None
@@ -207,7 +245,7 @@ def test_largest_connected_component() -> None:
     assert Graph([[]], "adjacency_list").largest_connected_component() == [1]
 
     g = Graph(
-        [[2], [1], [4, 5], [3, 5], [3, 4], []],
+        _adj([[2], [1], [4, 5], [3, 5], [3, 4], []]),
         "adjacency_list",
     )
     assert g.connected_components() == [[1, 2], [3, 4, 5], [6]]
@@ -217,33 +255,63 @@ def test_largest_connected_component() -> None:
 def test_is_hamiltonian() -> None:
     assert Graph([], "adjacency_list").is_hamiltonian() is False
     assert Graph([[]], "adjacency_list").is_hamiltonian() is False
-    assert Graph([[2], [1]], "adjacency_list").is_hamiltonian() is False
+    assert Graph(_adj([[2], [1]]), "adjacency_list").is_hamiltonian() is False
 
-    c4 = Graph([[2, 4], [1, 3], [2, 4], [1, 3]], "adjacency_list")
+    c4 = Graph(_adj([[2, 4], [1, 3], [2, 4], [1, 3]]), "adjacency_list")
     assert c4.is_hamiltonian() is True
 
     k5 = Graph.create_random_k_regular(5, 4)
     assert k5.is_hamiltonian() is True
 
     bowtie = Graph(
-        [[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]],
+        _adj([[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]]),
         "adjacency_list",
     )
     assert bowtie.is_hamiltonian() is False
 
     petersen = Graph(
-        [
-            [2, 5, 6],
-            [1, 3, 7],
-            [2, 4, 8],
-            [3, 5, 9],
-            [1, 4, 10],
-            [1, 8, 9],
-            [2, 9, 10],
-            [3, 6, 10],
-            [4, 6, 7],
-            [5, 7, 8],
-        ],
+        _adj(
+            [
+                [2, 5, 6],
+                [1, 3, 7],
+                [2, 4, 8],
+                [3, 5, 9],
+                [1, 4, 10],
+                [1, 8, 9],
+                [2, 9, 10],
+                [3, 6, 10],
+                [4, 6, 7],
+                [5, 7, 8],
+            ]
+        ),
         "adjacency_list",
     )
     assert petersen.is_hamiltonian() is False
+
+
+def test_weighted_graph_storage_and_unweighted_algorithms() -> None:
+    adj_list = [
+        [Neighbor(2, 3), Neighbor(3, 5)],
+        [Neighbor(1, 3), Neighbor(3, 2)],
+        [Neighbor(1, 5), Neighbor(2, 2)],
+    ]
+    g_list = Graph(adj_list, "adjacency_list")
+    expected_mat = np.array([[0, 3, 5], [3, 0, 2], [5, 2, 0]], dtype=np.int64)
+    expected_inc = np.array([[3, 5, 0], [3, 0, 2], [0, 5, 2]], dtype=np.int64)
+
+    np.testing.assert_array_equal(g_list.adjacency_matrix(), expected_mat)
+    np.testing.assert_array_equal(g_list.incidence_matrix(), expected_inc)
+
+    g_mat = Graph(expected_mat, "adjacency_matrix")
+    assert g_mat.adjacency_list() == adj_list
+    np.testing.assert_array_equal(g_mat.incidence_matrix(), expected_inc)
+
+    g_inc = Graph(expected_inc, "incidence_matrix")
+    assert g_inc.adjacency_list() == adj_list
+    np.testing.assert_array_equal(g_inc.adjacency_matrix(), expected_mat)
+
+    assert g_list.connected_components() == [[1, 2, 3]]
+    assert g_list.is_hamiltonian() is True
+    cycle = g_list.find_euler_cycle()
+    assert cycle is not None
+    _verify_euler_cycle(g_list, cycle)

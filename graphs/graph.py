@@ -10,9 +10,12 @@ from numpy.typing import NDArray
 from graphs import convert, utils
 from graphs.types import (
     AdjacencyList,
+    AdjacencyListInput,
     AdjacencyMatrix,
     GraphType,
     IncidenceMatrix,
+    MatrixInput,
+    Neighbor,
 )
 
 
@@ -23,34 +26,55 @@ class Graph:
 
     def __init__(
         self,
-        data: Sequence[Sequence[int]] | NDArray[np.integer],
+        data: AdjacencyListInput | MatrixInput,
         type: GraphType,
     ) -> None:
         if type == "adjacency_list":
             if isinstance(data, np.ndarray):
                 raise ValueError("Adjacency list must be a sequence, not an ndarray")
-            normalized_list = convert._validate_adjacency_list(data)
+            normalized_list = convert._validate_adjacency_list(
+                cast(AdjacencyListInput, data)
+            )
             self.vertex_count = len(normalized_list)
             self.data = normalized_list
         elif type == "adjacency_matrix":
-            normalized_matrix = convert._validate_adjacency_matrix(data)
+            normalized_matrix = convert._validate_adjacency_matrix(
+                cast(MatrixInput, data)
+            )
             self.vertex_count = int(normalized_matrix.shape[0])
             self.data = normalized_matrix
         elif type == "incidence_matrix":
-            normalized_inc = convert._validate_incidence_matrix(data)
+            normalized_inc = convert._validate_incidence_matrix(cast(MatrixInput, data))
             self.vertex_count = int(normalized_inc.shape[0])
             self.data = normalized_inc
         self.data_type = type
 
     @staticmethod
-    def from_file(path: str | Path, type: GraphType) -> "Graph":
+    def from_file(
+        path: str | Path,
+        type: GraphType,
+        weighted: bool = False,
+    ) -> "Graph":
         text = Path(path).read_text(encoding="utf-8")
         if type == "adjacency_list":
             lines = text.splitlines()
             parsed_list: AdjacencyList = []
             for line in lines:
                 content = line.split(":", 1)[1] if ":" in line else line
-                parsed_list.append([int(tok) for tok in content.split()])
+                tokens = content.split()
+                if weighted:
+                    if len(tokens) % 2 != 0:
+                        raise ValueError(
+                            "Weighted adjacency list line must have vertex-weight pairs"
+                        )
+                    parsed_list.append(
+                        [
+                            Neighbor(int(tokens[i]), int(tokens[i + 1]))
+                            for i in range(0, len(tokens), 2)
+                        ]
+                    )
+                else:
+                    parsed_list.append([Neighbor(int(tok), 1) for tok in tokens])
             return Graph(parsed_list, type)
 
         if type in ("adjacency_matrix", "incidence_matrix"):
@@ -80,8 +104,11 @@ class Graph:
             rng = np.random.default_rng()
             rows, cols = np.triu_indices(n, k=1)
             mask = rng.random(len(rows)) < p
-            matrix[rows[mask], cols[mask]] = 1
-            matrix[cols[mask], rows[mask]] = 1
+            edge_rows = rows[mask]
+            edge_cols = cols[mask]
+            weights = rng.integers(1, 11, size=len(edge_rows), dtype=np.int64)
+            matrix[edge_rows, edge_cols] = weights
+            matrix[edge_cols, edge_rows] = weights
         return Graph(matrix, "adjacency_matrix")
 
     @staticmethod
@@ -97,8 +124,9 @@ class Graph:
             rng = np.random.default_rng()
             rows, cols = np.triu_indices(n, k=1)
             chosen = rng.choice(len(rows), size=l, replace=False)
-            matrix[rows[chosen], cols[chosen]] = 1
-            matrix[cols[chosen], rows[chosen]] = 1
+            weights = rng.integers(1, 11, size=l, dtype=np.int64)
+            matrix[rows[chosen], cols[chosen]] = weights
+            matrix[cols[chosen], rows[chosen]] = weights
         return Graph(matrix, "adjacency_matrix")
 
     def adjacency_list(self) -> AdjacencyList:
@@ -134,8 +162,11 @@ class Graph:
             cast(AdjacencyMatrix, self.data)
         )
 
-    def _zero_based_adj(self) -> AdjacencyList:
-        return [[v - 1 for v in neighbors] for neighbors in self.adjacency_list()]
+    def _zero_based_adj(self) -> list[list[int]]:
+        return [
+            [neighbor.v - 1 for neighbor in neighbors]
+            for neighbors in self.adjacency_list()
+        ]
 
     def _set_from_adjacency_list(self, adj: AdjacencyList) -> None:
         if self.data_type == "adjacency_list":
@@ -145,8 +176,34 @@ class Graph:
         else:
             self.data = convert.adjacency_list_to_incidence_matrix(adj)
 
-    def _set_from_zero_based_adj(self, adj: AdjacencyList) -> None:
-        self._set_from_adjacency_list([[v + 1 for v in neighbors] for neighbors in adj])
+    def _set_from_zero_based_adj(self, adj: list[list[int]]) -> None:
+        self._set_from_adjacency_list(
+            [[Neighbor(v + 1, 1) for v in neighbors] for neighbors in adj]
+        )
+
+    def _randomize_weights(self, rng: np.random.Generator | None = None) -> None:
+        if rng is None:
+            rng = np.random.default_rng()
+        adj = self.adjacency_list()
+        edge_weights: dict[tuple[int, int], int] = {}
+        for u_idx, neighbors in enumerate(adj):
+            for neighbor in neighbors:
+                v_idx = neighbor.v - 1
+                if u_idx < v_idx:
+                    edge_weights[(u_idx, v_idx)] = int(rng.integers(1, 11))
+        weighted_adj: AdjacencyList = [
+            [
+                Neighbor(
+                    neighbor.v,
+                    edge_weights[
+                        (min(u_idx, neighbor.v - 1), max(u_idx, neighbor.v - 1))
+                    ],
+                )
+                for neighbor in neighbors
+            ]
+            for u_idx, neighbors in enumerate(adj)
+        ]
+        self._set_from_adjacency_list(weighted_adj)
 
     def _components(self) -> list[int]:
         adj = self._zero_based_adj()
@@ -175,7 +232,7 @@ class Graph:
             raise ValueError("Sequence is not a graphic sequence")
 
         items = [[int(deg), idx] for idx, deg in enumerate(sequence)]
-        adj: AdjacencyList = [[] for _ in range(len(items))]
+        adj: list[list[int]] = [[] for _ in range(len(items))]
 
         while items:
             items.sort(key=lambda pair: pair[0], reverse=True)
@@ -190,7 +247,7 @@ class Graph:
                 adj[v].append(u)
 
         return Graph(
-            [[v + 1 for v in neighbors] for neighbors in adj],
+            [[Neighbor(v + 1, 1) for v in neighbors] for neighbors in adj],
             "adjacency_list",
         )
 
@@ -273,6 +330,7 @@ class Graph:
         graph = Graph.from_sequence([k] * n)
         if n > 0 and k > 0:
             graph.randomize(max(10, n * k * 2))
+            graph._randomize_weights()
         return graph
 
     @staticmethod
@@ -331,6 +389,7 @@ class Graph:
             graph._set_from_zero_based_adj([sorted(s) for s in adj_sets])
             comp = graph._components()
 
+        graph._randomize_weights(rng)
         return graph
 
     def connected_components(self) -> list[list[int]]:

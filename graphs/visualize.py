@@ -3,6 +3,7 @@ import tkinter as tk
 from collections import defaultdict, deque
 
 from graphs.graph import Graph
+from graphs.types import AdjacencyList
 
 
 def _create_canvas(title: str, width: int, height: int) -> tuple[tk.Tk, tk.Canvas]:
@@ -16,14 +17,14 @@ def _create_canvas(title: str, width: int, height: int) -> tuple[tk.Tk, tk.Canva
 
 def _draw_graph(
     canvas: tk.Canvas,
-    adj: list[list[int]],
+    adj: AdjacencyList,
     positions: list[tuple[float, float]],
     vertex_radius: int,
 ) -> None:
     for u_idx, neighbors in enumerate(adj):
         x1, y1 = positions[u_idx]
-        for v in neighbors:
-            v_idx = v - 1
+        for neighbor in neighbors:
+            v_idx = neighbor.v - 1
             if u_idx < v_idx:
                 x2, y2 = positions[v_idx]
                 canvas.create_line(x1, y1, x2, y2, fill="#334155", width=2)
@@ -58,17 +59,17 @@ def _finish_window(root: tk.Tk, canvas: tk.Canvas, show: bool) -> tk.Tk:
 
 def _barycenter(
     vertex: int,
-    adj: list[list[int]],
+    adj: AdjacencyList,
     pos_in_prev: dict[int, int],
 ) -> float:
-    parents = [p for p in adj[vertex - 1] if p in pos_in_prev]
+    parents = [neighbor.v for neighbor in adj[vertex - 1] if neighbor.v in pos_in_prev]
     if not parents:
         return 0.0
     return sum(pos_in_prev[p] for p in parents) / len(parents)
 
 
 def _compute_layered_columns(
-    adj: list[list[int]],
+    adj: AdjacencyList,
     start_vertex: int = 1,
 ) -> dict[int, list[int]]:
     n = len(adj)
@@ -84,7 +85,8 @@ def _compute_layered_columns(
         queue = deque([root_vertex])
         while queue:
             u = queue.popleft()
-            for v in adj[u - 1]:
+            for neighbor in adj[u - 1]:
+                v = neighbor.v
                 if v not in layer:
                     layer[v] = layer[u] + 1
                     queue.append(v)

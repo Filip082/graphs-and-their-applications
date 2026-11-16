@@ -28,7 +28,7 @@ def main() -> None:
     print(f"Generated random Eulerian graph on {n} vertices:")
     print(f"Degrees: {[len(neighbors) for neighbors in adj]}")
     for u, neighbors in enumerate(adj, start=1):
-        print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
+        print(f"{u}: {' '.join(str(neighbor.v) for neighbor in neighbors)}".rstrip())
 
     cycle = graph.find_euler_cycle()
     if cycle is None:
