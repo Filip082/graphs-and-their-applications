@@ -53,7 +53,7 @@ def main() -> None:
     print(f"\nIs Hamiltonian: {graph.is_hamiltonian()}")
 
     if not args.no_gui:
-        visualize.on_circle(graph, title="Hamiltonian check")
+        visualize.circular(graph, title="Hamiltonian check")
 
 
 if __name__ == "__main__":

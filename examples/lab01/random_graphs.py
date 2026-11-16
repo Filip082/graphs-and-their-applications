@@ -48,7 +48,7 @@ def main() -> None:
 
     _print_graph(graph)
     if not args.no_gui:
-        visualize.on_circle(graph, title=title)
+        visualize.circular(graph, title=title)
 
 
 if __name__ == "__main__":

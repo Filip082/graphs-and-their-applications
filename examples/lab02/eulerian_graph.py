@@ -37,7 +37,7 @@ def main() -> None:
         print(f"\nEuler cycle: {' - '.join(str(v) for v in cycle)}")
 
     if not args.no_gui:
-        visualize.on_circle(graph, title=f"Random Eulerian graph (n={n})")
+        visualize.circular(graph, title=f"Random Eulerian graph (n={n})")
 
 
 if __name__ == "__main__":

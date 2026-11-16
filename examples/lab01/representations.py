@@ -57,7 +57,7 @@ def main() -> None:
         print()
 
     if not args.no_gui:
-        visualize.on_circle(graph, title=f"Graph ({data_type})")
+        visualize.circular(graph, title=f"Graph ({data_type})")
 
 
 if __name__ == "__main__":

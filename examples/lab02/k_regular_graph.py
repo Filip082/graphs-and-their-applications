@@ -32,7 +32,7 @@ def main() -> None:
         print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
 
     if not args.no_gui:
-        visualize.on_circle(graph, title=f"Random {args.k}-regular graph (n={args.n})")
+        visualize.circular(graph, title=f"Random {args.k}-regular graph (n={args.n})")
 
 
 if __name__ == "__main__":

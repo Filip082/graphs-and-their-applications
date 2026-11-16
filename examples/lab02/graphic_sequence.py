@@ -58,7 +58,7 @@ def main() -> None:
     _print_components(graph)
 
     if not args.no_gui:
-        visualize.on_circle(graph, title="Graph from graphic sequence")
+        visualize.circular(graph, title="Graph from graphic sequence")
 
     if args.randomize > 0:
         graph.randomize(args.randomize)
@@ -67,7 +67,7 @@ def main() -> None:
         print()
         _print_components(graph)
         if not args.no_gui:
-            visualize.on_circle(
+            visualize.circular(
                 graph,
                 title=f"Randomized graph ({args.randomize} steps)",
             )
