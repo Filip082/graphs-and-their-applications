@@ -50,7 +50,10 @@ def main() -> None:
     for u, neighbors in enumerate(graph.adjacency_list(), start=1):
         print(f"{u}: {' '.join(str(neighbor.v) for neighbor in neighbors)}".rstrip())
 
-    print(f"\nIs Hamiltonian: {graph.is_hamiltonian()}")
+    cycle = graph.find_hamiltonian_cycle()
+    print(f"\nIs Hamiltonian: {cycle is not None}")
+    if cycle is not None:
+        print(f"Hamiltonian cycle: {' - '.join(str(v) for v in cycle)}")
 
     if not args.no_gui:
         visualize.circular(graph, title="Hamiltonian check")

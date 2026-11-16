@@ -575,31 +575,43 @@ class Graph:
 
         return [v + 1 for v in cycle]
 
-    def is_hamiltonian(self) -> bool:
-        self._require_symmetric("is_hamiltonian")
+    def find_hamiltonian_cycle(self) -> list[int] | None:
+        self._require_symmetric("find_hamiltonian_cycle")
         n = self.vertex_count
         if n < 3:
-            return False
+            return None
         adj = self._zero_based_adj()
         if any(len(nbs) < 2 for nbs in adj) or max(_components_of(adj)) > 1:
-            return False
+            return None
 
         adj_sets = [set(nbs) for nbs in adj]
         visited = [False] * n
         visited[0] = True
+        path = [0]
 
-        def backtrack(last: int, depth: int) -> bool:
-            if depth == n:
-                return 0 in adj_sets[last]
+        def backtrack(last: int) -> bool:
+            if len(path) == n:
+                if 0 in adj_sets[last]:
+                    path.append(0)
+                    return True
+                return False
             for neighbor in adj[last]:
                 if not visited[neighbor]:
                     visited[neighbor] = True
-                    if backtrack(neighbor, depth + 1):
+                    path.append(neighbor)
+                    if backtrack(neighbor):
                         return True
+                    path.pop()
                     visited[neighbor] = False
             return False
 
-        return backtrack(0, 1)
+        if backtrack(0):
+            return [v + 1 for v in path]
+        return None
+
+    def is_hamiltonian(self) -> bool:
+        self._require_symmetric("is_hamiltonian")
+        return self.find_hamiltonian_cycle() is not None
 
     def _validate_vertex(self, v: int, name: str = "n") -> None:
         if isinstance(v, bool) or not isinstance(v, int):

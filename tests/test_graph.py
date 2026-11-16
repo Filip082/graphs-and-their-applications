@@ -319,6 +319,38 @@ def test_is_hamiltonian() -> None:
     assert petersen.is_hamiltonian() is False
 
 
+def _verify_hamiltonian_cycle(graph: Graph, cycle: list[int]) -> None:
+    n = graph.vertex_count
+    assert len(cycle) == n + 1
+    assert cycle[0] == cycle[-1]
+    assert set(cycle[:-1]) == set(range(1, n + 1))
+    adj = graph.adjacency_list()
+    for u, v in zip(cycle, cycle[1:], strict=False):
+        assert any(nb.v == v for nb in adj[u - 1])
+
+
+def test_find_hamiltonian_cycle() -> None:
+    assert Graph([], "adjacency_list").find_hamiltonian_cycle() is None
+    assert Graph([[]], "adjacency_list").find_hamiltonian_cycle() is None
+    assert Graph(_adj([[2], [1]]), "adjacency_list").find_hamiltonian_cycle() is None
+
+    c4 = Graph(_adj([[2, 4], [1, 3], [2, 4], [1, 3]]), "adjacency_list")
+    cycle_c4 = c4.find_hamiltonian_cycle()
+    assert cycle_c4 is not None
+    _verify_hamiltonian_cycle(c4, cycle_c4)
+
+    k5 = Graph.create_random_k_regular(5, 4)
+    cycle_k5 = k5.find_hamiltonian_cycle()
+    assert cycle_k5 is not None
+    _verify_hamiltonian_cycle(k5, cycle_k5)
+
+    bowtie = Graph(
+        _adj([[2, 3, 4, 5], [1, 3], [1, 2], [1, 5], [1, 4]]),
+        "adjacency_list",
+    )
+    assert bowtie.find_hamiltonian_cycle() is None
+
+
 def test_weighted_graph_storage_and_unweighted_algorithms() -> None:
     adj_list = [
         [Neighbor(2, 3), Neighbor(3, 5)],
@@ -682,6 +714,7 @@ def test_digraph_with_negative_weights_and_from_file(tmp_path: Path) -> None:
         g.connected_components,
         g.largest_connected_component,
         g.find_euler_cycle,
+        g.find_hamiltonian_cycle,
         g.is_hamiltonian,
         g.prim,
         g.kruskal,
