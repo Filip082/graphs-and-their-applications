@@ -152,3 +152,39 @@ def test_show_weights_toggle() -> None:
     finally:
         root_circular.destroy()
         root_layered.destroy()
+
+
+def test_subgraph_highlighting() -> None:
+    g = Graph(_adj([[2, 3], [1, 3], [1, 2]]), "adjacency_list")
+    mst = Graph(_adj([[2, 3], [1], [1]]), "adjacency_list")
+    try:
+        root = visualize.layered(g, show=False, subgraph=mst)
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        canvases = [w for w in root.winfo_children() if isinstance(w, tk.Canvas)]
+        canvas = canvases[0]
+        blue_lines = [
+            i
+            for i in canvas.find_all()
+            if canvas.type(i) == "line" and canvas.itemcget(i, "fill") == "#2563eb"
+        ]
+        faded_lines = [
+            i
+            for i in canvas.find_all()
+            if canvas.type(i) == "line" and canvas.itemcget(i, "fill") == "#cbd5e1"
+        ]
+        assert len(blue_lines) == 2
+        assert len(faded_lines) == 1
+    finally:
+        root.destroy()
+
+
+def test_invalid_subgraph_vertex_count() -> None:
+    g = Graph(_adj([[2], [1]]), "adjacency_list")
+    other = Graph(_adj([[2], [1], []]), "adjacency_list")
+    with pytest.raises(ValueError, match="Subgraph must have 2 vertices"):
+        visualize.circular(g, show=False, subgraph=other)
+    with pytest.raises(ValueError, match="Subgraph must have 2 vertices"):
+        visualize.layered(g, show=False, subgraph=other)

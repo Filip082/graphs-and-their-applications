@@ -15,20 +15,55 @@ def _create_canvas(title: str, width: int, height: int) -> tuple[tk.Tk, tk.Canva
     return root, canvas
 
 
+def _subgraph_edges(subgraph: Graph | None, vertex_count: int) -> set[tuple[int, int]]:
+    if subgraph is None:
+        return set()
+    if subgraph.vertex_count != vertex_count:
+        raise ValueError(
+            f"Subgraph must have {vertex_count} vertices, got {subgraph.vertex_count}"
+        )
+    edges: set[tuple[int, int]] = set()
+    for u_idx, neighbors in enumerate(subgraph.adjacency_list()):
+        for neighbor in neighbors:
+            v_idx = neighbor.v - 1
+            if u_idx < v_idx:
+                edges.add((u_idx, v_idx))
+    return edges
+
+
 def _draw_graph(
     canvas: tk.Canvas,
     adj: AdjacencyList,
     positions: list[tuple[float, float]],
     vertex_radius: int,
     show_weights: bool = False,
+    subgraph_edges: set[tuple[int, int]] | None = None,
 ) -> None:
+    has_subgraph = subgraph_edges is not None
+    highlighted_sub = subgraph_edges or set()
+
     for u_idx, neighbors in enumerate(adj):
         x1, y1 = positions[u_idx]
         for neighbor in neighbors:
             v_idx = neighbor.v - 1
             if u_idx < v_idx:
                 x2, y2 = positions[v_idx]
-                canvas.create_line(x1, y1, x2, y2, fill="#334155", width=2)
+                in_sub = (u_idx, v_idx) in highlighted_sub
+                if in_sub:
+                    edge_color, edge_width, text_color = "#2563eb", 4, "#1d4ed8"
+                elif has_subgraph:
+                    edge_color, edge_width, text_color = "#cbd5e1", 1.5, "#64748b"
+                else:
+                    edge_color, edge_width, text_color = "#334155", 2, "#0f172a"
+
+                canvas.create_line(
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    fill=edge_color,
+                    width=edge_width,
+                )
                 if show_weights:
                     mx, my = (x1 + x2) / 2, (y1 + y2) / 2
                     label = str(neighbor.w)
@@ -45,7 +80,7 @@ def _draw_graph(
                         mx,
                         my,
                         text=label,
-                        fill="#0f172a",
+                        fill=text_color,
                         font=("TkDefaultFont", 10, "bold"),
                     )
 
@@ -136,10 +171,13 @@ def circular(
     title: str = "Graph",
     show: bool = True,
     show_weights: bool = False,
+    subgraph: Graph | None = None,
 ) -> tk.Tk:
+    n = graph.vertex_count
+    subgraph_edges = _subgraph_edges(subgraph, n) if subgraph is not None else None
+
     root, canvas = _create_canvas(title, size, size)
 
-    n = graph.vertex_count
     if n > 0:
         center = size / 2
         r = radius if radius is not None else size * 0.36
@@ -165,6 +203,7 @@ def circular(
             positions,
             vertex_radius,
             show_weights=show_weights,
+            subgraph_edges=subgraph_edges,
         )
 
     return _finish_window(root, canvas, show)
@@ -180,10 +219,12 @@ def layered(
     title: str = "Graph",
     show: bool = True,
     show_weights: bool = False,
+    subgraph: Graph | None = None,
 ) -> tk.Tk:
     n = graph.vertex_count
     if n > 0 and not 1 <= start_vertex <= n:
         raise ValueError(f"start_vertex must be between 1 and {n}, got {start_vertex}")
+    subgraph_edges = _subgraph_edges(subgraph, n) if subgraph is not None else None
 
     root, canvas = _create_canvas(title, width, height)
 
@@ -217,6 +258,7 @@ def layered(
             positions,
             vertex_radius,
             show_weights=show_weights,
+            subgraph_edges=subgraph_edges,
         )
 
     return _finish_window(root, canvas, show)
