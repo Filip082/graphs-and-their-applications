@@ -1,11 +1,26 @@
 import argparse
+from pathlib import Path
+from typing import cast
 
-from graphs import Graph, visualize
+from graphs import Graph, GraphType, visualize
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Find center and minimax center of a random weighted graph."
+    )
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=None,
+        help="Path to an input weighted graph file (generates random if omitted).",
+    )
+    parser.add_argument(
+        "--type",
+        dest="data_type",
+        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        default="adjacency_list",
+        help="Representation used in --file.",
     )
     parser.add_argument("--n", type=int, default=12, help="Number of vertices.")
     parser.add_argument(
@@ -18,7 +33,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    graph = Graph.create_random_binomial(args.n, args.p, connected=True)
+    if args.file is not None:
+        graph = Graph.from_file(
+            args.file, cast(GraphType, args.data_type), weighted=True
+        )
+    else:
+        graph = Graph.create_random_binomial(args.n, args.p, connected=True)
 
     dist_matrix = graph.distance_matrix()
     max_val = max((int(val) for row in dist_matrix for val in row), default=0)
@@ -33,7 +53,9 @@ def main() -> None:
     print(f"Centrum minimax = {minimax_v} (odleglosc od najdalszego: {minimax_dist})")
 
     if not args.no_gui:
-        visualize.layered(graph, title=f"Graph center (n={args.n})", show_weights=True)
+        visualize.layered(
+            graph, title=f"Graph center (n={graph.vertex_count})", show_weights=True
+        )
 
 
 if __name__ == "__main__":

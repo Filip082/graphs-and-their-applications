@@ -1,6 +1,8 @@
 import argparse
+from pathlib import Path
+from typing import cast
 
-from graphs import Graph, visualize
+from graphs import Graph, GraphType, visualize
 from graphs.types import AdjacencyList
 
 
@@ -14,6 +16,19 @@ def _format_weighted_adj(adj: AdjacencyList) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a connected random undirected graph with edge weights."
+    )
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=None,
+        help="Path to an input weighted graph file (generates random if omitted).",
+    )
+    parser.add_argument(
+        "--type",
+        dest="data_type",
+        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        default="adjacency_list",
+        help="Representation used in --file.",
     )
     parser.add_argument("--n", type=int, default=12, help="Number of vertices.")
     parser.add_argument(
@@ -35,7 +50,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.l is not None:
+    if args.file is not None:
+        graph = Graph.from_file(
+            args.file, cast(GraphType, args.data_type), weighted=True
+        )
+        title = f"Weighted graph ({args.file.name})"
+    elif args.l is not None:
         graph = Graph.create_random_uniform(args.n, args.l, connected=True)
         title = f"Connected weighted G({args.n}, {args.l})"
     else:

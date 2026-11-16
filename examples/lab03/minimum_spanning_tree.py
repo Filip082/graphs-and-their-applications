@@ -1,6 +1,8 @@
 import argparse
+from pathlib import Path
+from typing import cast
 
-from graphs import Graph, visualize
+from graphs import Graph, GraphType, visualize
 
 
 def _mst_edges(mst: Graph) -> list[tuple[int, int, int]]:
@@ -24,6 +26,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Find a minimum spanning tree using Prim's or Kruskal's algorithm."
     )
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=None,
+        help="Path to an input weighted graph file (generates random if omitted).",
+    )
+    parser.add_argument(
+        "--type",
+        dest="data_type",
+        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        default="adjacency_list",
+        help="Representation used in --file.",
+    )
     parser.add_argument("--n", type=int, default=12, help="Number of vertices.")
     parser.add_argument(
         "--p", type=float, default=0.35, help="Edge probability for G(n, p)."
@@ -41,7 +56,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    graph = Graph.create_random_binomial(args.n, args.p, connected=True)
+    if args.file is not None:
+        graph = Graph.from_file(
+            args.file, cast(GraphType, args.data_type), weighted=True
+        )
+    else:
+        graph = Graph.create_random_binomial(args.n, args.p, connected=True)
 
     print("Weighted adjacency list (vertex: neighbor(weight)):")
     for u, neighbors in enumerate(graph.adjacency_list(), start=1):
@@ -62,7 +82,7 @@ def main() -> None:
     if not args.no_gui and mst_to_show is not None:
         visualize.layered(
             mst_to_show,
-            title=f"Minimum Spanning Tree (n={args.n})",
+            title=f"Minimum Spanning Tree (n={graph.vertex_count})",
             show_weights=True,
         )
 

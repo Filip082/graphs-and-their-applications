@@ -1,11 +1,26 @@
 import argparse
+from pathlib import Path
+from typing import cast
 
-from graphs import Graph, visualize
+from graphs import Graph, GraphType, visualize
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run all Lab 03 tasks on a single random connected weighted graph."
+    )
+    parser.add_argument(
+        "--file",
+        type=Path,
+        default=None,
+        help="Path to an input weighted graph file (generates random if omitted).",
+    )
+    parser.add_argument(
+        "--type",
+        dest="data_type",
+        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        default="adjacency_list",
+        help="Representation used in --file.",
     )
     parser.add_argument("--n", type=int, default=12, help="Number of vertices.")
     parser.add_argument(
@@ -21,9 +36,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    graph = Graph.create_random_binomial(args.n, args.p, connected=True)
+    if args.file is not None:
+        graph = Graph.from_file(
+            args.file, cast(GraphType, args.data_type), weighted=True
+        )
+    else:
+        graph = Graph.create_random_binomial(args.n, args.p, connected=True)
 
-    print("1. Connected random weighted graph (vertex: neighbor(weight)):")
+    print("1. Connected weighted graph (vertex: neighbor(weight)):")
     for u, neighbors in enumerate(graph.adjacency_list(), start=1):
         print(f"{u}: {' '.join(f'{nb.v}({nb.w})' for nb in neighbors)}".rstrip())
 
@@ -59,7 +79,13 @@ def main() -> None:
         print(f"  {u} - {v} (w={w})")
 
     if not args.no_gui:
-        visualize.layered(mst, title=f"Lab 03 MST (n={args.n})", show_weights=True)
+        visualize.layered(
+            graph,
+            start_vertex=args.start,
+            title=f"Lab 03 MST (n={graph.vertex_count})",
+            show_weights=True,
+            subgraph=mst,
+        )
 
 
 if __name__ == "__main__":
