@@ -27,7 +27,7 @@ def test_graph_members_and_conversions() -> None:
     expected_inc_mat = np.array([[1, 1], [1, 0], [0, 1]], dtype=np.int64)
 
     np.testing.assert_array_equal(g.adjacency_matrix(), expected_adj_mat)
-    np.testing.assert_array_equal(g.incidence_matrix(), expected_inc_mat)
+    np.testing.assert_array_equal(g.incidence_matrix().matrix, expected_inc_mat)
 
     returned_list = g.adjacency_list()
     returned_list[0].append(Neighbor(99, 1))
@@ -37,7 +37,7 @@ def test_graph_members_and_conversions() -> None:
     assert g_mat.vertex_count == 3
     assert g_mat.data_type == "adjacency_matrix"
     assert g_mat.adjacency_list() == adj_list
-    np.testing.assert_array_equal(g_mat.incidence_matrix(), expected_inc_mat)
+    np.testing.assert_array_equal(g_mat.incidence_matrix().matrix, expected_inc_mat)
 
     g_inc = Graph(expected_inc_mat, "incidence_matrix")
     assert g_inc.vertex_count == 3
@@ -124,15 +124,15 @@ def test_random_binomial() -> None:
 def test_random_uniform() -> None:
     g = Graph.create_random_uniform(6, 7)
     assert g.vertex_count == 6
-    assert g.incidence_matrix().shape == (6, 7)
+    assert g.incidence_matrix().matrix.shape == (6, 7)
     assert int(np.count_nonzero(g.adjacency_matrix())) == 14
     _assert_weights_in_range(g)
 
     g_zero = Graph.create_random_uniform(4, 0)
-    assert g_zero.incidence_matrix().shape == (4, 0)
+    assert g_zero.incidence_matrix().matrix.shape == (4, 0)
 
     g_full = Graph.create_random_uniform(4, 6)
-    assert g_full.incidence_matrix().shape == (4, 6)
+    assert g_full.incidence_matrix().matrix.shape == (4, 6)
 
     with pytest.raises(ValueError):
         Graph.create_random_uniform(-1, 0)
@@ -143,7 +143,7 @@ def test_random_uniform() -> None:
 
     for edges in (7, 10):
         g_conn = Graph.create_random_uniform(8, edges, connected=True)
-        assert g_conn.incidence_matrix().shape == (8, edges)
+        assert g_conn.incidence_matrix().matrix.shape == (8, edges)
         assert len(g_conn.connected_components()) == 1
         _assert_weights_in_range(g_conn)
 
@@ -330,11 +330,11 @@ def test_weighted_graph_storage_and_unweighted_algorithms() -> None:
     expected_inc = np.array([[3, 5, 0], [3, 0, 2], [0, 5, 2]], dtype=np.int64)
 
     np.testing.assert_array_equal(g_list.adjacency_matrix(), expected_mat)
-    np.testing.assert_array_equal(g_list.incidence_matrix(), expected_inc)
+    np.testing.assert_array_equal(g_list.incidence_matrix().matrix, expected_inc)
 
     g_mat = Graph(expected_mat, "adjacency_matrix")
     assert g_mat.adjacency_list() == adj_list
-    np.testing.assert_array_equal(g_mat.incidence_matrix(), expected_inc)
+    np.testing.assert_array_equal(g_mat.incidence_matrix().matrix, expected_inc)
 
     g_inc = Graph(expected_inc, "incidence_matrix")
     assert g_inc.adjacency_list() == adj_list
@@ -662,8 +662,18 @@ def test_digraph_with_negative_weights_and_from_file(tmp_path: Path) -> None:
     g_mat = Graph(expected_mat, "adjacency_matrix")
     assert g_mat.adjacency_list() == expected_adj
 
-    with pytest.raises(ValueError):
-        g.incidence_matrix()
+    g_inc = g.incidence_matrix()
+    assert g_inc.directed is True
+    assert Graph(g_inc, "incidence_matrix").adjacency_list() == expected_adj
+    inc_file = tmp_path / "directed_inc.txt"
+    inc_file.write_text(
+        "\n".join(" ".join(str(x) for x in row) for row in g_inc.matrix) + "\n",
+        encoding="utf-8",
+    )
+    assert (
+        Graph.from_file(inc_file, "incidence_matrix", directed=True).adjacency_list()
+        == expected_adj
+    )
     with pytest.raises(ValueError):
         g.dijkstra(1)
 

@@ -15,5 +15,12 @@ class Neighbor(NamedTuple):
 AdjacencyList = list[list[Neighbor]]
 AdjacencyListInput = Sequence[Sequence[tuple[int, int]]]
 AdjacencyMatrix = NDArray[np.int64]
-IncidenceMatrix = NDArray[np.int64]
 MatrixInput = NDArray[np.integer] | Sequence[Sequence[int]]
+
+
+class IncidenceMatrix(NamedTuple):
+    matrix: NDArray[np.int64]
+    directed: bool = False
+
+
+IncidenceMatrixInput = IncidenceMatrix | MatrixInput

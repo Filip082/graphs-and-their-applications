@@ -112,7 +112,7 @@ def main() -> None:
 
     if args.file is not None:
         graph = Graph.from_file(
-            args.file, cast(GraphType, args.data_type), weighted=True
+            args.file, cast(GraphType, args.data_type), weighted=True, directed=True
         )
     else:
         graph = Graph.create_random_binomial(
@@ -125,6 +125,8 @@ def main() -> None:
 
     print("\nAdjacency matrix:")
     print(graph.adjacency_matrix())
+    print("\nIncidence matrix:")
+    print(graph.incidence_matrix().matrix)
 
     components = graph.kosaraju()
     print("\n2. Strongly connected components (Kosaraju):")

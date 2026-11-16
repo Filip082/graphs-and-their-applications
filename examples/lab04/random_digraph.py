@@ -47,7 +47,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.file is not None:
-        graph = Graph.from_file(args.file, cast(GraphType, args.data_type))
+        graph = Graph.from_file(
+            args.file, cast(GraphType, args.data_type), directed=True
+        )
         title = f"Digraph ({args.file.name})"
     else:
         graph = Graph.create_random_binomial(
@@ -59,6 +61,8 @@ def main() -> None:
     print(_format_adjacency_list(graph.adjacency_list()))
     print("\nAdjacency matrix:")
     print(graph.adjacency_matrix())
+    print("\nIncidence matrix:")
+    print(graph.incidence_matrix().matrix)
 
     if not args.no_gui:
         visualize.layered(graph, title=title, arrow=True)

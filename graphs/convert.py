@@ -5,6 +5,7 @@ from graphs.types import (
     AdjacencyListInput,
     AdjacencyMatrix,
     IncidenceMatrix,
+    IncidenceMatrixInput,
     MatrixInput,
     Neighbor,
 )
@@ -55,10 +56,20 @@ def _validate_adjacency_matrix(
     return arr.copy()
 
 
+def _coerce_incidence_input(
+    incidence_matrix: IncidenceMatrixInput,
+) -> tuple[np.ndarray, bool]:
+    if isinstance(incidence_matrix, IncidenceMatrix):
+        return np.asarray(incidence_matrix.matrix, dtype=np.int64), bool(
+            incidence_matrix.directed
+        )
+    return np.asarray(incidence_matrix, dtype=np.int64), False
+
+
 def _validate_incidence_matrix(
-    incidence_matrix: MatrixInput,
+    incidence_matrix: IncidenceMatrixInput,
 ) -> IncidenceMatrix:
-    arr = np.asarray(incidence_matrix, dtype=np.int64)
+    arr, directed = _coerce_incidence_input(incidence_matrix)
     if arr.ndim != 2:
         raise ValueError("Incidence matrix must be a 2D array")
     if arr.shape[1] > 0:
@@ -68,15 +79,25 @@ def _validate_incidence_matrix(
             )
         edges: set[tuple[int, int]] = set()
         for e in range(arr.shape[1]):
-            u, v = np.flatnonzero(arr[:, e])
-            if arr[u, e] != arr[v, e]:
-                raise ValueError(
-                    "Non-zero entries in an incidence matrix column must be equal"
-                )
-            edges.add((int(u), int(v)))
-        if len(edges) != arr.shape[1]:
-            raise ValueError("Incidence matrix contains duplicate edges")
-    return arr.copy()
+            u, v = (int(idx) for idx in np.flatnonzero(arr[:, e]))
+            if directed:
+                first_val = int(arr[u, e])
+                if first_val not in (-1, 1):
+                    raise ValueError(
+                        "First non-zero entry in a directed incidence matrix column "
+                        "must be -1 or 1"
+                    )
+                edge = (u, v) if first_val == -1 else (v, u)
+            else:
+                if arr[u, e] != arr[v, e]:
+                    raise ValueError(
+                        "Non-zero entries in an incidence matrix column must be equal"
+                    )
+                edge = (u, v)
+            if edge in edges:
+                raise ValueError("Incidence matrix contains duplicate edges")
+            edges.add(edge)
+    return IncidenceMatrix(arr.copy(), directed=directed)
 
 
 def _matrix_to_list(matrix: AdjacencyMatrix) -> AdjacencyList:
@@ -87,18 +108,28 @@ def _matrix_to_list(matrix: AdjacencyMatrix) -> AdjacencyList:
 
 
 def _matrix_to_incidence(matrix: AdjacencyMatrix) -> IncidenceMatrix:
-    if not np.array_equal(matrix, matrix.T):
-        raise ValueError(
-            "Incidence matrix is only supported for symmetric (undirected) graphs"
-        )
     n = matrix.shape[0]
-    rows, cols = np.nonzero(np.triu(matrix, k=1))
+    if np.array_equal(matrix, matrix.T):
+        rows, cols = np.nonzero(np.triu(matrix, k=1))
+        m = len(rows)
+        inc = np.zeros((n, m), dtype=np.int64)
+        if m > 0:
+            edge_idx = np.arange(m)
+            inc[rows, edge_idx] = inc[cols, edge_idx] = matrix[rows, cols]
+        return IncidenceMatrix(inc, directed=False)
+
+    rows, cols = np.nonzero(matrix)
     m = len(rows)
     inc = np.zeros((n, m), dtype=np.int64)
-    if m > 0:
-        edge_idx = np.arange(m)
-        inc[rows, edge_idx] = inc[cols, edge_idx] = matrix[rows, cols]
-    return inc
+    for edge_idx, (u, v) in enumerate(zip(rows, cols, strict=True)):
+        w = int(matrix[u, v])
+        if u < v:
+            inc[u, edge_idx] = -1
+            inc[v, edge_idx] = w
+        else:
+            inc[v, edge_idx] = 1
+            inc[u, edge_idx] = -w
+    return IncidenceMatrix(inc, directed=True)
 
 
 def adjacency_list_to_adjacency_matrix(
@@ -126,7 +157,7 @@ def adjacency_matrix_to_adjacency_list(
 
 
 def incidence_matrix_to_adjacency_list(
-    incidence_matrix: MatrixInput,
+    incidence_matrix: IncidenceMatrixInput,
 ) -> AdjacencyList:
     return _matrix_to_list(incidence_matrix_to_adjacency_matrix(incidence_matrix))
 
@@ -138,12 +169,18 @@ def adjacency_matrix_to_incidence_matrix(
 
 
 def incidence_matrix_to_adjacency_matrix(
-    incidence_matrix: MatrixInput,
+    incidence_matrix: IncidenceMatrixInput,
 ) -> AdjacencyMatrix:
-    matrix = _validate_incidence_matrix(incidence_matrix)
-    n, m = matrix.shape
+    inc = _validate_incidence_matrix(incidence_matrix)
+    n, m = inc.matrix.shape
     adj = np.zeros((n, n), dtype=np.int64)
     for e in range(m):
-        u, v = np.flatnonzero(matrix[:, e])
-        adj[u, v] = adj[v, u] = matrix[u, e]
+        u, v = (int(idx) for idx in np.flatnonzero(inc.matrix[:, e]))
+        if inc.directed:
+            if inc.matrix[u, e] == -1:
+                adj[u, v] = inc.matrix[v, e]
+            else:
+                adj[v, u] = -inc.matrix[v, e]
+        else:
+            adj[u, v] = adj[v, u] = inc.matrix[u, e]
     return adj

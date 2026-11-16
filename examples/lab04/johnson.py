@@ -93,7 +93,7 @@ def main() -> None:
 
     if args.file is not None:
         graph = Graph.from_file(
-            args.file, cast(GraphType, args.data_type), weighted=True
+            args.file, cast(GraphType, args.data_type), weighted=True, directed=True
         )
     else:
         graph = _create_strongly_connected_weighted_digraph(
