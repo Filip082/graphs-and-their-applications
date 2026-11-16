@@ -1,10 +1,9 @@
 import heapq
 import math
-import sys
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -21,6 +20,34 @@ from graphs.types import (
 )
 
 
+def _components_of(adj: Sequence[Collection[int]]) -> list[int]:
+    comp = [0] * len(adj)
+    cid = 0
+    for start in range(len(adj)):
+        if comp[start] == 0:
+            cid += 1
+            comp[start] = cid
+            stack = [start]
+            while stack:
+                v = stack.pop()
+                for u in adj[v]:
+                    if comp[u] == 0:
+                        comp[u] = cid
+                        stack.append(u)
+    return comp
+
+
+def _swap_edges(adj_sets: list[set[int]], a: int, b: int, c: int, d: int) -> None:
+    adj_sets[a].remove(b)
+    adj_sets[b].remove(a)
+    adj_sets[c].remove(d)
+    adj_sets[d].remove(c)
+    adj_sets[a].add(d)
+    adj_sets[d].add(a)
+    adj_sets[b].add(c)
+    adj_sets[c].add(b)
+
+
 class Graph:
     vertex_count: int
     data_type: GraphType
@@ -34,21 +61,17 @@ class Graph:
         if type == "adjacency_list":
             if isinstance(data, np.ndarray):
                 raise ValueError("Adjacency list must be a sequence, not an ndarray")
-            normalized_list = convert._validate_adjacency_list(
-                cast(AdjacencyListInput, data)
-            )
-            self.vertex_count = len(normalized_list)
-            self.data = normalized_list
+            adj = convert._validate_adjacency_list(cast(AdjacencyListInput, data))
+            self.vertex_count = len(adj)
+            self.data = adj
         elif type == "adjacency_matrix":
-            normalized_matrix = convert._validate_adjacency_matrix(
-                cast(MatrixInput, data)
-            )
-            self.vertex_count = int(normalized_matrix.shape[0])
-            self.data = normalized_matrix
+            mat = convert._validate_adjacency_matrix(cast(MatrixInput, data))
+            self.vertex_count = int(mat.shape[0])
+            self.data = mat
         elif type == "incidence_matrix":
-            normalized_inc = convert._validate_incidence_matrix(cast(MatrixInput, data))
-            self.vertex_count = int(normalized_inc.shape[0])
-            self.data = normalized_inc
+            inc = convert._validate_incidence_matrix(cast(MatrixInput, data))
+            self.vertex_count = int(inc.shape[0])
+            self.data = inc
         self.data_type = type
 
     @staticmethod
@@ -59,25 +82,23 @@ class Graph:
     ) -> "Graph":
         text = Path(path).read_text(encoding="utf-8")
         if type == "adjacency_list":
-            lines = text.splitlines()
-            parsed_list: AdjacencyList = []
-            for line in lines:
-                content = line.split(":", 1)[1] if ":" in line else line
-                tokens = content.split()
+            parsed: AdjacencyList = []
+            for line in text.splitlines():
+                tokens = (line.split(":", 1)[1] if ":" in line else line).split()
                 if weighted:
-                    if len(tokens) % 2 != 0:
+                    if len(tokens) % 2:
                         raise ValueError(
                             "Weighted adjacency list line must have vertex-weight pairs"
                         )
-                    parsed_list.append(
+                    parsed.append(
                         [
                             Neighbor(int(tokens[i]), int(tokens[i + 1]))
                             for i in range(0, len(tokens), 2)
                         ]
                     )
                 else:
-                    parsed_list.append([Neighbor(int(tok), 1) for tok in tokens])
-            return Graph(parsed_list, type)
+                    parsed.append([Neighbor(int(tok), 1) for tok in tokens])
+            return Graph(parsed, type)
 
         if type in ("adjacency_matrix", "incidence_matrix"):
             rows = [
@@ -87,24 +108,35 @@ class Graph:
             ]
             if not rows:
                 return Graph(np.zeros((0, 0), dtype=np.int64), type)
-            row_lengths = {len(row) for row in rows}
-            if len(row_lengths) != 1:
+            if len({len(row) for row in rows}) != 1:
                 raise ValueError("All matrix rows in file must have equal length")
             return Graph(np.array(rows, dtype=np.int64), type)
 
         raise ValueError(f"Unsupported graph data type: {type!r}")
 
     @staticmethod
-    def _random_spanning_tree_edges(
-        n: int, rng: np.random.Generator
-    ) -> list[tuple[int, int]]:
+    def _random_spanning_tree_indices(n: int, rng: np.random.Generator) -> list[int]:
         perm = rng.permutation(n)
-        edges: list[tuple[int, int]] = []
+        indices: list[int] = []
         for i in range(1, n):
-            u = int(perm[i])
-            v = int(perm[int(rng.integers(0, i))])
-            edges.append((min(u, v), max(u, v)))
-        return edges
+            a, b = int(perm[i]), int(perm[int(rng.integers(0, i))])
+            u, v = min(a, b), max(a, b)
+            indices.append(u * (2 * n - u - 1) // 2 + (v - u - 1))
+        return indices
+
+    @staticmethod
+    def _random_weighted_matrix(
+        n: int,
+        rows: NDArray[np.intp],
+        cols: NDArray[np.intp],
+        rng: np.random.Generator,
+    ) -> "Graph":
+        matrix = np.zeros((n, n), dtype=np.int64)
+        if len(rows) > 0:
+            weights = rng.integers(1, 11, size=len(rows), dtype=np.int64)
+            matrix[rows, cols] = weights
+            matrix[cols, rows] = weights
+        return Graph(matrix, "adjacency_matrix")
 
     @staticmethod
     def create_random_binomial(n: int, p: float, connected: bool = False) -> "Graph":
@@ -114,22 +146,15 @@ class Graph:
             raise ValueError("Probability p must be between 0.0 and 1.0")
         if connected and n >= 2 and p == 0.0:
             raise ValueError("Cannot create a connected graph with n >= 2 and p == 0.0")
+        if n <= 1:
+            return Graph(np.zeros((n, n), dtype=np.int64), "adjacency_matrix")
 
-        matrix = np.zeros((n, n), dtype=np.int64)
-        if n > 1:
-            rng = np.random.default_rng()
-            rows, cols = np.triu_indices(n, k=1)
-            mask = rng.random(len(rows)) < p
-            if connected:
-                for u, v in Graph._random_spanning_tree_edges(n, rng):
-                    idx = u * (2 * n - u - 1) // 2 + (v - u - 1)
-                    mask[idx] = True
-            edge_rows = rows[mask]
-            edge_cols = cols[mask]
-            weights = rng.integers(1, 11, size=len(edge_rows), dtype=np.int64)
-            matrix[edge_rows, edge_cols] = weights
-            matrix[edge_cols, edge_rows] = weights
-        return Graph(matrix, "adjacency_matrix")
+        rng = np.random.default_rng()
+        rows, cols = np.triu_indices(n, k=1)
+        mask = rng.random(len(rows)) < p
+        if connected:
+            mask[Graph._random_spanning_tree_indices(n, rng)] = True
+        return Graph._random_weighted_matrix(n, rows[mask], cols[mask], rng)
 
     @staticmethod
     def create_random_uniform(
@@ -147,33 +172,21 @@ class Graph:
                 f"Cannot create a connected graph on {n} vertices "
                 f"with fewer than {n - 1} edges"
             )
+        if l == 0:
+            return Graph(np.zeros((n, n), dtype=np.int64), "adjacency_matrix")
 
-        matrix = np.zeros((n, n), dtype=np.int64)
-        if l > 0:
-            rng = np.random.default_rng()
-            rows, cols = np.triu_indices(n, k=1)
-            if connected and n >= 2:
-                tree_indices = [
-                    u * (2 * n - u - 1) // 2 + (v - u - 1)
-                    for u, v in Graph._random_spanning_tree_edges(n, rng)
-                ]
-                remaining_count = l - (n - 1)
-                if remaining_count > 0:
-                    is_tree = np.zeros(len(rows), dtype=bool)
-                    is_tree[tree_indices] = True
-                    available = np.flatnonzero(~is_tree)
-                    extra = rng.choice(available, size=remaining_count, replace=False)
-                    chosen = np.concatenate(
-                        [np.array(tree_indices, dtype=np.intp), extra]
-                    )
-                else:
-                    chosen = np.array(tree_indices, dtype=np.intp)
-            else:
-                chosen = rng.choice(len(rows), size=l, replace=False)
-            weights = rng.integers(1, 11, size=l, dtype=np.int64)
-            matrix[rows[chosen], cols[chosen]] = weights
-            matrix[cols[chosen], rows[chosen]] = weights
-        return Graph(matrix, "adjacency_matrix")
+        rng = np.random.default_rng()
+        rows, cols = np.triu_indices(n, k=1)
+        if connected and n >= 2:
+            mask = np.zeros(len(rows), dtype=bool)
+            mask[Graph._random_spanning_tree_indices(n, rng)] = True
+            if l > n - 1:
+                available = np.flatnonzero(~mask)
+                mask[rng.choice(available, size=l - (n - 1), replace=False)] = True
+            return Graph._random_weighted_matrix(n, rows[mask], cols[mask], rng)
+
+        chosen = rng.choice(len(rows), size=l, replace=False)
+        return Graph._random_weighted_matrix(n, rows[chosen], cols[chosen], rng)
 
     def adjacency_list(self) -> AdjacencyList:
         if self.data_type == "adjacency_list":
@@ -228,49 +241,23 @@ class Graph:
         )
 
     def _randomize_weights(self, rng: np.random.Generator | None = None) -> None:
-        if rng is None:
-            rng = np.random.default_rng()
+        rng = rng or np.random.default_rng()
         adj = self.adjacency_list()
-        edge_weights: dict[tuple[int, int], int] = {}
-        for u_idx, neighbors in enumerate(adj):
-            for neighbor in neighbors:
-                v_idx = neighbor.v - 1
-                if u_idx < v_idx:
-                    edge_weights[(u_idx, v_idx)] = int(rng.integers(1, 11))
-        weighted_adj: AdjacencyList = [
+        weights = {
+            (u, nb.v - 1): int(rng.integers(1, 11))
+            for u, nbs in enumerate(adj)
+            for nb in nbs
+            if u < nb.v - 1
+        }
+        self._set_from_adjacency_list(
             [
-                Neighbor(
-                    neighbor.v,
-                    edge_weights[
-                        (min(u_idx, neighbor.v - 1), max(u_idx, neighbor.v - 1))
-                    ],
-                )
-                for neighbor in neighbors
+                [
+                    Neighbor(nb.v, weights[(min(u, nb.v - 1), max(u, nb.v - 1))])
+                    for nb in nbs
+                ]
+                for u, nbs in enumerate(adj)
             ]
-            for u_idx, neighbors in enumerate(adj)
-        ]
-        self._set_from_adjacency_list(weighted_adj)
-
-    def _components(self) -> list[int]:
-        adj = self._zero_based_adj()
-        n = self.vertex_count
-        if n >= 900:
-            sys.setrecursionlimit(max(sys.getrecursionlimit(), n + 100))
-        comp = [-1] * n
-        nr = 0
-
-        def components_r(component_id: int, v: int) -> None:
-            for u in adj[v]:
-                if comp[u] == -1:
-                    comp[u] = component_id
-                    components_r(component_id, u)
-
-        for v in range(n):
-            if comp[v] == -1:
-                nr += 1
-                comp[v] = nr
-                components_r(nr, v)
-        return comp
+        )
 
     @staticmethod
     def from_sequence(sequence: Sequence[int] | NDArray[np.integer]) -> "Graph":
@@ -279,7 +266,6 @@ class Graph:
 
         items = [[int(deg), idx] for idx, deg in enumerate(sequence)]
         adj: list[list[int]] = [[] for _ in range(len(items))]
-
         while items:
             items.sort(key=lambda pair: pair[0], reverse=True)
             deg, u = items[0]
@@ -305,10 +291,9 @@ class Graph:
 
         adj = self._zero_based_adj()
         adj_sets = [set(neighbors) for neighbors in adj]
-        edges: list[tuple[int, int]] = [
-            (u, v) for u, neighbors in enumerate(adj) for v in neighbors if u < v
-        ]
-        if len(edges) < 2:
+        edges = [(u, v) for u, nbs in enumerate(adj) for v in nbs if u < v]
+        m = len(edges)
+        if m < 2:
             return
 
         rng = np.random.default_rng()
@@ -316,116 +301,75 @@ class Graph:
         def try_swap(i: int, j: int) -> bool:
             a, b = edges[i]
             c, d = edges[j]
-            orientations = [(c, d), (d, c)] if rng.random() < 0.5 else [(d, c), (c, d)]
+            orientations = ((c, d), (d, c)) if rng.random() < 0.5 else ((d, c), (c, d))
             for x, y in orientations:
                 if (
                     len({a, b, x, y}) == 4
                     and y not in adj_sets[a]
                     and x not in adj_sets[b]
                 ):
-                    adj_sets[a].remove(b)
-                    adj_sets[b].remove(a)
-                    adj_sets[x].remove(y)
-                    adj_sets[y].remove(x)
-                    adj_sets[a].add(y)
-                    adj_sets[y].add(a)
-                    adj_sets[b].add(x)
-                    adj_sets[x].add(b)
+                    _swap_edges(adj_sets, a, b, x, y)
                     edges[i] = (min(a, y), max(a, y))
                     edges[j] = (min(b, x), max(b, x))
                     return True
             return False
 
-        m = len(edges)
-        max_attempts = 100
         for _ in range(n):
-            swapped = False
-            for _ in range(max_attempts):
+            for _ in range(100):
                 i = int(rng.integers(0, m))
                 j = int(rng.integers(0, m - 1))
-                if j >= i:
-                    j += 1
-                if try_swap(i, j):
-                    swapped = True
+                if try_swap(i, j + int(j >= i)):
                     break
-            if not swapped:
-                found_any = False
-                for i in range(m):
-                    for j in range(i + 1, m):
-                        if try_swap(i, j):
-                            found_any = True
-                            break
-                    if found_any:
-                        break
-                if not found_any:
+            else:
+                if not any(try_swap(i, j) for i in range(m) for j in range(i + 1, m)):
                     break
 
         self._set_from_zero_based_adj([sorted(neighbors) for neighbors in adj_sets])
 
     def _connect_components(self) -> None:
-        comp = self._components()
-        while max(comp) > 1:
-            num_comp = len(set(comp))
-            adj_sets = [set(neighbors) for neighbors in self._zero_based_adj()]
-            c1_edges: list[tuple[int, int]] = []
-            other_edges: list[tuple[int, int]] = []
-            for u, neighbors in enumerate(adj_sets):
-                for v in neighbors:
-                    if u < v:
-                        if comp[u] == 1:
-                            c1_edges.append((u, v))
-                        else:
-                            other_edges.append((u, v))
-            if not c1_edges or not other_edges:
-                break
+        adj_sets = [set(neighbors) for neighbors in self._zero_based_adj()]
+        comp = _components_of(adj_sets)
+        changed = False
 
-            merged = False
-            for a, b in c1_edges:
-                for c, d in other_edges:
-                    adj_sets[a].remove(b)
-                    adj_sets[b].remove(a)
-                    adj_sets[c].remove(d)
-                    adj_sets[d].remove(c)
-                    adj_sets[a].add(d)
-                    adj_sets[d].add(a)
-                    adj_sets[b].add(c)
-                    adj_sets[c].add(b)
-                    self._set_from_zero_based_adj([sorted(s) for s in adj_sets])
-                    new_comp = self._components()
-                    if len(set(new_comp)) < num_comp:
-                        comp = new_comp
-                        merged = True
-                        break
-                    adj_sets[a].remove(d)
-                    adj_sets[d].remove(a)
-                    adj_sets[b].remove(c)
-                    adj_sets[c].remove(b)
-                    adj_sets[a].add(b)
-                    adj_sets[b].add(a)
-                    adj_sets[c].add(d)
-                    adj_sets[d].add(c)
-                if merged:
-                    break
-            if not merged:
+        def try_merge(num_comp: int) -> list[int] | None:
+            c1 = [
+                (u, v)
+                for u, nbs in enumerate(adj_sets)
+                for v in nbs
+                if u < v and comp[u] == 1
+            ]
+            other = [
+                (u, v)
+                for u, nbs in enumerate(adj_sets)
+                for v in nbs
+                if u < v and comp[u] != 1
+            ]
+            for a, b in c1:
+                for c, d in other:
+                    _swap_edges(adj_sets, a, b, c, d)
+                    new_comp = _components_of(adj_sets)
+                    if max(new_comp) < num_comp:
+                        return new_comp
+                    _swap_edges(adj_sets, a, d, c, b)
+            return None
+
+        while (num_comp := max(comp, default=0)) > 1:
+            new_comp = try_merge(num_comp)
+            if new_comp is None:
                 break
+            comp = new_comp
+            changed = True
+
+        if changed:
+            self._set_from_zero_based_adj([sorted(s) for s in adj_sets])
 
     @staticmethod
     def create_random_k_regular(n: int, k: int, connected: bool = False) -> "Graph":
-        if n < 0 or k < 0:
-            raise ValueError("n and k must be non-negative")
-        if n == 0 and k > 0:
-            raise ValueError(
-                "Cannot create a k-regular graph with 0 vertices and k > 0"
-            )
-        if n > 0 and (k >= n or (n * k) % 2 != 0):
+        if n < 0 or k < 0 or (n == 0 and k > 0) or (n > 0 and (k >= n or n * k % 2)):
             raise ValueError(f"Cannot create {k}-regular simple graph on {n} vertices")
-        if connected and n >= 2 and k == 0:
+        if connected and ((n >= 2 and k == 0) or (n >= 3 and k == 1)):
             raise ValueError(
-                f"Cannot create a connected 0-regular graph on {n} vertices"
-            )
-        if connected and n >= 3 and k == 1:
-            raise ValueError(
-                f"Cannot create a connected 1-regular graph on {n} vertices"
+                f"Cannot create a connected {k}-regular graph on {n} vertices"
             )
 
         graph = Graph.from_sequence([k] * n)
@@ -444,14 +388,12 @@ class Graph:
             raise ValueError(
                 "Cannot create a connected Eulerian simple graph with 2 vertices"
             )
-        if n == 0:
-            return Graph([], "adjacency_list")
-        if n == 1:
-            return Graph([[]], "adjacency_list")
+        if n <= 1:
+            return Graph([[] for _ in range(n)], "adjacency_list")
 
         max_even = n - 1 if n % 2 == 1 else n - 2
         rng = np.random.default_rng()
-        seq: list[int] = [2] * n
+        seq = [2] * n
         for _ in range(50):
             candidate = (rng.integers(1, max_even // 2 + 1, size=n) * 2).tolist()
             if utils.is_graphic_sequence(candidate):
@@ -468,68 +410,48 @@ class Graph:
     def connected_components(self) -> list[list[int]]:
         if self.vertex_count == 0:
             return []
-        comp = self._components()
-        num_components = max(comp)
-        groups: list[list[int]] = [[] for _ in range(num_components)]
+        comp = _components_of(self._zero_based_adj())
+        groups: list[list[int]] = [[] for _ in range(max(comp))]
         for v_idx, cid in enumerate(comp):
             groups[cid - 1].append(v_idx + 1)
         return groups
 
     def largest_connected_component(self) -> list[int]:
-        components = self.connected_components()
-        if not components:
-            return []
-        return max(components, key=len)
+        return max(self.connected_components(), key=len, default=[])
 
     def find_euler_cycle(self) -> list[int] | None:
         if self.vertex_count == 0:
             return []
         adj = self._zero_based_adj()
-        if any(len(neighbors) % 2 != 0 for neighbors in adj):
+        if any(len(nbs) % 2 for nbs in adj) or max(_components_of(adj)) > 1:
             return None
-        comp = self._components()
-        if max(comp) > 1:
-            return None
-        if all(len(neighbors) == 0 for neighbors in adj):
+        if all(not nbs for nbs in adj):
             return [1]
 
-        rem = [sorted(neighbors) for neighbors in adj]
-
-        def reachable_count(start: int) -> int:
-            visited = {start}
-            queue = deque([start])
+        def is_bridge(u: int, v: int) -> bool:
+            visited = {u}
+            queue = deque([u])
             while queue:
                 curr = queue.popleft()
-                for nxt in rem[curr]:
+                for nxt in adj[curr]:
+                    if (curr, nxt) in ((u, v), (v, u)):
+                        continue
+                    if nxt == v:
+                        return False
                     if nxt not in visited:
                         visited.add(nxt)
                         queue.append(nxt)
-            return len(visited)
-
-        def is_bridge(u: int, v: int) -> bool:
-            before = reachable_count(u)
-            rem[u].remove(v)
-            rem[v].remove(u)
-            after = reachable_count(u)
-            rem[u].append(v)
-            rem[v].append(u)
-            rem[u].sort()
-            rem[v].sort()
-            return after < before
+            return True
 
         u = 0
         cycle = [u]
-        while rem[u]:
-            if len(rem[u]) == 1:
-                v = rem[u][0]
+        while adj[u]:
+            if len(adj[u]) == 1:
+                v = adj[u][0]
             else:
-                v = rem[u][0]
-                for candidate in rem[u]:
-                    if not is_bridge(u, candidate):
-                        v = candidate
-                        break
-            rem[u].remove(v)
-            rem[v].remove(u)
+                v = next((c for c in adj[u] if not is_bridge(u, c)), adj[u][0])
+            adj[u].remove(v)
+            adj[v].remove(u)
             u = v
             cycle.append(u)
 
@@ -540,32 +462,25 @@ class Graph:
         if n < 3:
             return False
         adj = self._zero_based_adj()
-        if any(len(neighbors) < 2 for neighbors in adj):
-            return False
-        comp = self._components()
-        if max(comp) > 1:
+        if any(len(nbs) < 2 for nbs in adj) or max(_components_of(adj)) > 1:
             return False
 
-        adj_sets = [set(neighbors) for neighbors in adj]
-        stack = [0]
+        adj_sets = [set(nbs) for nbs in adj]
         visited = [False] * n
         visited[0] = True
 
-        def backtrack() -> bool:
-            if len(stack) == n:
-                return stack[0] in adj_sets[stack[-1]]
-            last = stack[-1]
+        def backtrack(last: int, depth: int) -> bool:
+            if depth == n:
+                return 0 in adj_sets[last]
             for neighbor in adj[last]:
                 if not visited[neighbor]:
                     visited[neighbor] = True
-                    stack.append(neighbor)
-                    if backtrack():
+                    if backtrack(neighbor, depth + 1):
                         return True
-                    stack.pop()
                     visited[neighbor] = False
             return False
 
-        return backtrack()
+        return backtrack(0, 1)
 
     def dijkstra(self, n: int) -> dict[int, tuple[int | float, list[int]]]:
         if isinstance(n, bool) or not isinstance(n, int):
@@ -576,18 +491,13 @@ class Graph:
             )
 
         adj = self.adjacency_list()
-        for neighbors in adj:
-            for neighbor in neighbors:
-                if neighbor.w < 0:
-                    raise ValueError(
-                        "Dijkstra's algorithm requires non-negative edge weights"
-                    )
+        if any(nb.w < 0 for nbs in adj for nb in nbs):
+            raise ValueError("Dijkstra's algorithm requires non-negative edge weights")
 
         count = self.vertex_count
-        start = n - 1
         dist: list[int | float] = [math.inf] * count
         prev: list[int | None] = [None] * count
-        dist[start] = 0
+        dist[n - 1] = 0
         ready = [False] * count
 
         for _ in range(count):
@@ -603,55 +513,48 @@ class Graph:
 
             for neighbor in adj[u]:
                 v = neighbor.v - 1
-                if not ready[v]:
-                    new_dist = dist[u] + neighbor.w
-                    if dist[v] > new_dist:
-                        dist[v] = new_dist
-                        prev[v] = u
+                if not ready[v] and dist[u] + neighbor.w < dist[v]:
+                    dist[v] = dist[u] + neighbor.w
+                    prev[v] = u
 
-        paths: dict[int, tuple[int | float, list[int]]] = {}
-        for v in range(count):
+        def build_path(v: int) -> list[int]:
             if dist[v] == math.inf:
-                paths[v + 1] = (math.inf, [])
-                continue
+                return []
             path: list[int] = []
             curr: int | None = v
             while curr is not None:
                 path.append(curr + 1)
                 curr = prev[curr]
-            path.reverse()
-            paths[v + 1] = (dist[v], path)
-        return paths
+            return path[::-1]
+
+        return {v + 1: (dist[v], build_path(v)) for v in range(count)}
 
     def distance_matrix(self) -> NDArray[np.int64]:
         count = self.vertex_count
         matrix = np.zeros((count, count), dtype=np.int64)
         for u in range(1, count + 1):
             paths = self.dijkstra(u)
-            for v in range(1, count + 1):
-                dist = paths[v][0]
-                if math.isinf(dist):
-                    raise ValueError(
-                        "Cannot compute distance matrix for a disconnected graph"
-                    )
-                matrix[u - 1, v - 1] = int(dist)
+            row = [paths[v][0] for v in range(1, count + 1)]
+            if any(math.isinf(d) for d in row):
+                raise ValueError(
+                    "Cannot compute distance matrix for a disconnected graph"
+                )
+            matrix[u - 1] = row
         return matrix
 
-    def center(self) -> tuple[int, int]:
+    def _center_by(self, metric: Literal["sum", "max"]) -> tuple[int, int]:
         if self.vertex_count == 0:
             raise ValueError("Cannot find center of an empty graph")
         dist = self.distance_matrix()
-        sums = dist.sum(axis=1)
-        idx = int(np.argmin(sums))
-        return idx + 1, int(sums[idx])
+        scores = dist.sum(axis=1) if metric == "sum" else dist.max(axis=1)
+        idx = int(np.argmin(scores))
+        return idx + 1, int(scores[idx])
+
+    def center(self) -> tuple[int, int]:
+        return self._center_by("sum")
 
     def minimax(self) -> tuple[int, int]:
-        if self.vertex_count == 0:
-            raise ValueError("Cannot find minimax center of an empty graph")
-        dist = self.distance_matrix()
-        maxes = dist.max(axis=1)
-        idx = int(np.argmin(maxes))
-        return idx + 1, int(maxes[idx])
+        return self._center_by("max")
 
     @staticmethod
     def _graph_from_weighted_edges(
@@ -672,9 +575,7 @@ class Graph:
         in_tree = [False] * count
         in_tree[0] = True
         tree_count = 1
-        heap: list[tuple[int, int, int]] = [
-            (neighbor.w, 0, neighbor.v - 1) for neighbor in adj[0]
-        ]
+        heap: list[tuple[int, int, int]] = [(nb.w, 0, nb.v - 1) for nb in adj[0]]
         heapq.heapify(heap)
         mst_edges: list[tuple[int, int, int]] = []
 
@@ -685,10 +586,10 @@ class Graph:
             in_tree[v] = True
             tree_count += 1
             mst_edges.append((u, v, w))
-            for neighbor in adj[v]:
-                nxt = neighbor.v - 1
+            for nb in adj[v]:
+                nxt = nb.v - 1
                 if not in_tree[nxt]:
-                    heapq.heappush(heap, (neighbor.w, v, nxt))
+                    heapq.heappush(heap, (nb.w, v, nxt))
 
         if tree_count < count:
             raise ValueError("Cannot find spanning tree for a disconnected graph")
@@ -699,12 +600,11 @@ class Graph:
         if count <= 1:
             return Graph._graph_from_weighted_edges(count, [])
 
-        adj = self.adjacency_list()
         edges = sorted(
-            (neighbor.w, u, neighbor.v - 1)
-            for u, neighbors in enumerate(adj)
-            for neighbor in neighbors
-            if u < neighbor.v - 1
+            (nb.w, u, nb.v - 1)
+            for u, nbs in enumerate(self.adjacency_list())
+            for nb in nbs
+            if u < nb.v - 1
         )
         parent = list(range(count))
         rank = [0] * count
@@ -715,23 +615,19 @@ class Graph:
                 x = parent[x]
             return x
 
-        def union(a: int, b: int) -> bool:
-            ra, rb = find(a), find(b)
+        mst_edges: list[tuple[int, int, int]] = []
+        for w, u, v in edges:
+            ra, rb = find(u), find(v)
             if ra == rb:
-                return False
+                continue
             if rank[ra] < rank[rb]:
                 ra, rb = rb, ra
             parent[rb] = ra
             if rank[ra] == rank[rb]:
                 rank[ra] += 1
-            return True
-
-        mst_edges: list[tuple[int, int, int]] = []
-        for w, u, v in edges:
-            if union(u, v):
-                mst_edges.append((u, v, w))
-                if len(mst_edges) == count - 1:
-                    break
+            mst_edges.append((u, v, w))
+            if len(mst_edges) == count - 1:
+                break
 
         if len(mst_edges) < count - 1:
             raise ValueError("Cannot find spanning tree for a disconnected graph")
