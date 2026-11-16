@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from graphs import Neighbor, convert
-from graphs.types import AdjacencyList, IncidenceMatrix
+from graphs.types import AdjacencyList
 
 
 @pytest.fixture
@@ -52,18 +52,20 @@ def test_all_six_conversions(
         convert.adjacency_list_to_adjacency_matrix(sample_adj_list),
         sample_adj_matrix,
     )
-    inc_from_list = convert.adjacency_list_to_incidence_matrix(sample_adj_list)
-    assert not inc_from_list.directed
-    np.testing.assert_array_equal(inc_from_list.matrix, sample_inc_matrix)
+    np.testing.assert_array_equal(
+        convert.adjacency_list_to_incidence_matrix(sample_adj_list),
+        sample_inc_matrix,
+    )
     assert (
         convert.adjacency_matrix_to_adjacency_list(sample_adj_matrix) == sample_adj_list
     )
     assert (
         convert.incidence_matrix_to_adjacency_list(sample_inc_matrix) == sample_adj_list
     )
-    inc_from_mat = convert.adjacency_matrix_to_incidence_matrix(sample_adj_matrix)
-    assert not inc_from_mat.directed
-    np.testing.assert_array_equal(inc_from_mat.matrix, sample_inc_matrix)
+    np.testing.assert_array_equal(
+        convert.adjacency_matrix_to_incidence_matrix(sample_adj_matrix),
+        sample_inc_matrix,
+    )
     np.testing.assert_array_equal(
         convert.incidence_matrix_to_adjacency_matrix(sample_inc_matrix),
         sample_adj_matrix,
@@ -72,7 +74,7 @@ def test_all_six_conversions(
 
 def test_empty_and_edgeless_graphs() -> None:
     assert convert.adjacency_list_to_adjacency_matrix([]).shape == (0, 0)
-    assert convert.adjacency_list_to_incidence_matrix([]).matrix.shape == (0, 0)
+    assert convert.adjacency_list_to_incidence_matrix([]).shape == (0, 0)
     assert (
         convert.adjacency_matrix_to_adjacency_list(np.zeros((0, 0), dtype=np.int64))
         == []
@@ -87,11 +89,11 @@ def test_empty_and_edgeless_graphs() -> None:
     edgeless_inc = np.zeros((3, 0), dtype=np.int64)
 
     np.testing.assert_array_equal(
-        convert.adjacency_list_to_incidence_matrix(edgeless_list).matrix,
+        convert.adjacency_list_to_incidence_matrix(edgeless_list),
         edgeless_inc,
     )
     np.testing.assert_array_equal(
-        convert.adjacency_matrix_to_incidence_matrix(edgeless_adj).matrix,
+        convert.adjacency_matrix_to_incidence_matrix(edgeless_adj),
         edgeless_inc,
     )
     assert convert.incidence_matrix_to_adjacency_list(edgeless_inc) == edgeless_list
@@ -146,7 +148,7 @@ def test_weighted_all_six_conversions() -> None:
         weighted_adj_matrix,
     )
     np.testing.assert_array_equal(
-        convert.adjacency_list_to_incidence_matrix(weighted_adj_list).matrix,
+        convert.adjacency_list_to_incidence_matrix(weighted_adj_list),
         weighted_inc_matrix,
     )
     assert (
@@ -158,7 +160,7 @@ def test_weighted_all_six_conversions() -> None:
         == weighted_adj_list
     )
     np.testing.assert_array_equal(
-        convert.adjacency_matrix_to_incidence_matrix(weighted_adj_matrix).matrix,
+        convert.adjacency_matrix_to_incidence_matrix(weighted_adj_matrix),
         weighted_inc_matrix,
     )
     np.testing.assert_array_equal(
@@ -229,13 +231,14 @@ def test_directed_weighted_conversions() -> None:
         ],
         dtype=np.int64,
     )
-    assert inc_from_list.directed is True
-    assert inc_from_mat.directed is True
-    np.testing.assert_array_equal(inc_from_list.matrix, expected_digraph_inc)
-    np.testing.assert_array_equal(inc_from_mat.matrix, expected_digraph_inc)
-    assert convert.incidence_matrix_to_adjacency_list(inc_from_list) == digraph_list
+    np.testing.assert_array_equal(inc_from_list, expected_digraph_inc)
+    np.testing.assert_array_equal(inc_from_mat, expected_digraph_inc)
+    assert (
+        convert.incidence_matrix_to_adjacency_list(inc_from_list, directed=True)
+        == digraph_list
+    )
     np.testing.assert_array_equal(
-        convert.incidence_matrix_to_adjacency_matrix(inc_from_mat),
+        convert.incidence_matrix_to_adjacency_matrix(inc_from_mat, directed=True),
         digraph_matrix,
     )
 
@@ -245,16 +248,18 @@ def test_directed_weighted_conversions() -> None:
         [],
     ]
     neg_inc = convert.adjacency_list_to_incidence_matrix(neg_weighted_digraph)
-    assert neg_inc.directed is True
-    assert convert.incidence_matrix_to_adjacency_list(neg_inc) == neg_weighted_digraph
+    assert (
+        convert.incidence_matrix_to_adjacency_list(neg_inc, directed=True)
+        == neg_weighted_digraph
+    )
 
     with pytest.raises(ValueError):
         convert.incidence_matrix_to_adjacency_list(
-            IncidenceMatrix(np.array([[2], [3]], dtype=np.int64), directed=True)
+            np.array([[2], [3]], dtype=np.int64), directed=True
         )
     with pytest.raises(ValueError):
         convert.incidence_matrix_to_adjacency_list(
-            IncidenceMatrix(np.array([[-1, -1], [2, 3]], dtype=np.int64), directed=True)
+            np.array([[-1, -1], [2, 3]], dtype=np.int64), directed=True
         )
 
 

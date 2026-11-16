@@ -26,7 +26,12 @@ def main() -> None:
     parser.add_argument(
         "--type",
         dest="data_type",
-        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        choices=[
+            "adjacency_list",
+            "adjacency_matrix",
+            "incidence_matrix",
+            "directed_incidence_matrix",
+        ],
         default="adjacency_list",
         help="Representation used in --file.",
     )
@@ -45,9 +50,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.file is not None:
-        graph = Graph.from_file(
-            args.file, cast(GraphType, args.data_type), directed=True
-        )
+        graph = Graph.from_file(args.file, cast(GraphType, args.data_type))
         title = f"Kosaraju ({args.file.name})"
     else:
         graph = Graph.create_random_binomial(

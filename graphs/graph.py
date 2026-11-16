@@ -15,7 +15,6 @@ from graphs.types import (
     AdjacencyMatrix,
     GraphType,
     IncidenceMatrix,
-    IncidenceMatrixInput,
     MatrixInput,
     Neighbor,
 )
@@ -56,7 +55,7 @@ class Graph:
 
     def __init__(
         self,
-        data: AdjacencyListInput | IncidenceMatrixInput,
+        data: AdjacencyListInput | MatrixInput,
         type: GraphType,
     ) -> None:
         if type == "adjacency_list":
@@ -69,9 +68,12 @@ class Graph:
             mat = convert._validate_adjacency_matrix(cast(MatrixInput, data))
             self.vertex_count = int(mat.shape[0])
             self.data = mat
-        elif type == "incidence_matrix":
-            inc = convert._validate_incidence_matrix(cast(IncidenceMatrixInput, data))
-            self.vertex_count = int(inc.matrix.shape[0])
+        elif type in ("incidence_matrix", "directed_incidence_matrix"):
+            inc = convert._validate_incidence_matrix(
+                cast(MatrixInput, data),
+                directed=(type == "directed_incidence_matrix"),
+            )
+            self.vertex_count = int(inc.shape[0])
             self.data = inc
         self.data_type = type
 
@@ -80,7 +82,6 @@ class Graph:
         path: str | Path,
         type: GraphType,
         weighted: bool = False,
-        directed: bool = False,
     ) -> "Graph":
         text = Path(path).read_text(encoding="utf-8")
         if type == "adjacency_list":
@@ -102,23 +103,21 @@ class Graph:
                     parsed.append([Neighbor(int(tok), 1) for tok in tokens])
             return Graph(parsed, type)
 
-        if type in ("adjacency_matrix", "incidence_matrix"):
+        if type in (
+            "adjacency_matrix",
+            "incidence_matrix",
+            "directed_incidence_matrix",
+        ):
             rows = [
                 [int(tok) for tok in line.split()]
                 for line in text.splitlines()
                 if line.strip()
             ]
             if not rows:
-                empty = np.zeros((0, 0), dtype=np.int64)
-                if type == "incidence_matrix":
-                    return Graph(IncidenceMatrix(empty, directed=directed), type)
-                return Graph(empty, type)
+                return Graph(np.zeros((0, 0), dtype=np.int64), type)
             if len({len(row) for row in rows}) != 1:
                 raise ValueError("All matrix rows in file must have equal length")
-            arr = np.array(rows, dtype=np.int64)
-            if type == "incidence_matrix":
-                return Graph(IncidenceMatrix(arr, directed=directed), type)
-            return Graph(arr, type)
+            return Graph(np.array(rows, dtype=np.int64), type)
 
         raise ValueError(f"Unsupported graph data type: {type!r}")
 
@@ -286,7 +285,8 @@ class Graph:
                 cast(AdjacencyMatrix, self.data)
             )
         return convert.incidence_matrix_to_adjacency_list(
-            cast(IncidenceMatrix, self.data)
+            cast(IncidenceMatrix, self.data),
+            directed=(self.data_type == "directed_incidence_matrix"),
         )
 
     def adjacency_matrix(self) -> AdjacencyMatrix:
@@ -297,13 +297,13 @@ class Graph:
                 cast(AdjacencyList, self.data)
             )
         return convert.incidence_matrix_to_adjacency_matrix(
-            cast(IncidenceMatrix, self.data)
+            cast(IncidenceMatrix, self.data),
+            directed=(self.data_type == "directed_incidence_matrix"),
         )
 
     def incidence_matrix(self) -> IncidenceMatrix:
-        if self.data_type == "incidence_matrix":
-            inc = cast(IncidenceMatrix, self.data)
-            return IncidenceMatrix(inc.matrix.copy(), inc.directed)
+        if self.data_type in ("incidence_matrix", "directed_incidence_matrix"):
+            return cast(IncidenceMatrix, self.data).copy()
         if self.data_type == "adjacency_list":
             return convert.adjacency_list_to_incidence_matrix(
                 cast(AdjacencyList, self.data)

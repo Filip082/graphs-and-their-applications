@@ -54,7 +54,7 @@ def main() -> None:
 
     if data_type != "incidence_matrix":
         print("Incidence matrix:")
-        print(graph.incidence_matrix().matrix)
+        print(graph.incidence_matrix())
         print()
 
     if not args.no_gui:

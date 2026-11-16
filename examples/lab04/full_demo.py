@@ -73,7 +73,12 @@ def main() -> None:
     parser.add_argument(
         "--type",
         dest="data_type",
-        choices=["adjacency_list", "adjacency_matrix", "incidence_matrix"],
+        choices=[
+            "adjacency_list",
+            "adjacency_matrix",
+            "incidence_matrix",
+            "directed_incidence_matrix",
+        ],
         default="adjacency_list",
         help="Representation used in --file.",
     )
@@ -112,7 +117,7 @@ def main() -> None:
 
     if args.file is not None:
         graph = Graph.from_file(
-            args.file, cast(GraphType, args.data_type), weighted=True, directed=True
+            args.file, cast(GraphType, args.data_type), weighted=True
         )
     else:
         graph = Graph.create_random_binomial(
@@ -126,7 +131,7 @@ def main() -> None:
     print("\nAdjacency matrix:")
     print(graph.adjacency_matrix())
     print("\nIncidence matrix:")
-    print(graph.incidence_matrix().matrix)
+    print(graph.incidence_matrix())
 
     components = graph.kosaraju()
     print("\n2. Strongly connected components (Kosaraju):")
