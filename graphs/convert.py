@@ -1,12 +1,13 @@
 from collections.abc import Sequence
 
 import numpy as np
-from numpy.typing import NDArray
 
-AdjacencyList = list[list[int]]
-AdjacencyMatrix = NDArray[np.int64]
-IncidenceMatrix = NDArray[np.int64]
-MatrixInput = NDArray[np.integer] | Sequence[Sequence[int]]
+from graphs.types import (
+    AdjacencyList,
+    AdjacencyMatrix,
+    IncidenceMatrix,
+    MatrixInput,
+)
 
 
 def _validate_adjacency_list(adjacency_list: Sequence[Sequence[int]]) -> AdjacencyList:

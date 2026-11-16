@@ -2,15 +2,18 @@ import sys
 from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from graphs import convert, utils
-from graphs.convert import AdjacencyList, AdjacencyMatrix, IncidenceMatrix
-
-GraphType = Literal["adjacency_list", "adjacency_matrix", "incidence_matrix"]
+from graphs.types import (
+    AdjacencyList,
+    AdjacencyMatrix,
+    GraphType,
+    IncidenceMatrix,
+)
 
 
 class Graph:
