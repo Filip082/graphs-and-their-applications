@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import numpy as np
@@ -344,3 +345,88 @@ def test_weighted_graph_storage_and_unweighted_algorithms() -> None:
     cycle = g_list.find_euler_cycle()
     assert cycle is not None
     _verify_euler_cycle(g_list, cycle)
+
+
+def test_dijkstra_task3_example() -> None:
+    adj_list = [
+        [Neighbor(2, 3), Neighbor(3, 2), Neighbor(5, 9)],
+        [Neighbor(1, 3), Neighbor(4, 2), Neighbor(5, 4)],
+        [Neighbor(1, 2), Neighbor(5, 6), Neighbor(6, 9)],
+        [Neighbor(2, 2), Neighbor(7, 3)],
+        [
+            Neighbor(1, 9),
+            Neighbor(2, 4),
+            Neighbor(3, 6),
+            Neighbor(7, 1),
+            Neighbor(8, 2),
+        ],
+        [Neighbor(3, 9), Neighbor(8, 1), Neighbor(9, 2)],
+        [Neighbor(4, 3), Neighbor(5, 1), Neighbor(10, 5)],
+        [
+            Neighbor(5, 2),
+            Neighbor(6, 1),
+            Neighbor(10, 5),
+            Neighbor(11, 6),
+            Neighbor(12, 9),
+        ],
+        [Neighbor(6, 2), Neighbor(11, 2)],
+        [Neighbor(7, 5), Neighbor(8, 5), Neighbor(12, 5)],
+        [Neighbor(8, 6), Neighbor(9, 2), Neighbor(12, 3)],
+        [Neighbor(8, 9), Neighbor(10, 5), Neighbor(11, 3)],
+    ]
+    expected = {
+        1: (0, [1]),
+        2: (3, [1, 2]),
+        3: (2, [1, 3]),
+        4: (5, [1, 2, 4]),
+        5: (7, [1, 2, 5]),
+        6: (10, [1, 2, 5, 8, 6]),
+        7: (8, [1, 2, 4, 7]),
+        8: (9, [1, 2, 5, 8]),
+        9: (12, [1, 2, 5, 8, 6, 9]),
+        10: (13, [1, 2, 4, 7, 10]),
+        11: (14, [1, 2, 5, 8, 6, 9, 11]),
+        12: (17, [1, 2, 5, 8, 6, 9, 11, 12]),
+    }
+
+    g_list = Graph(adj_list, "adjacency_list")
+    assert g_list.dijkstra(1) == expected
+
+    g_mat = Graph(g_list.adjacency_matrix(), "adjacency_matrix")
+    assert g_mat.dijkstra(1) == expected
+
+    g_inc = Graph(g_list.incidence_matrix(), "incidence_matrix")
+    assert g_inc.dijkstra(1) == expected
+
+
+def test_dijkstra_edge_cases() -> None:
+    single = Graph([[]], "adjacency_list")
+    assert single.dijkstra(1) == {1: (0, [1])}
+
+    disconnected = Graph(
+        [
+            [Neighbor(2, 4)],
+            [Neighbor(1, 4)],
+            [Neighbor(4, 2)],
+            [Neighbor(3, 2)],
+        ],
+        "adjacency_list",
+    )
+    assert disconnected.dijkstra(1) == {
+        1: (0, [1]),
+        2: (4, [1, 2]),
+        3: (math.inf, []),
+        4: (math.inf, []),
+    }
+
+    empty = Graph([], "adjacency_list")
+    with pytest.raises(ValueError):
+        empty.dijkstra(1)
+
+    for bad in (0, -1, 5, True):
+        with pytest.raises(ValueError):
+            disconnected.dijkstra(bad)
+
+    neg = Graph([[Neighbor(2, -1)], [Neighbor(1, -1)]], "adjacency_list")
+    with pytest.raises(ValueError):
+        neg.dijkstra(1)

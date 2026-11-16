@@ -1,3 +1,4 @@
+import math
 import sys
 from collections import deque
 from collections.abc import Sequence
@@ -564,3 +565,59 @@ class Graph:
             return False
 
         return backtrack()
+
+    def dijkstra(self, n: int) -> dict[int, tuple[int | float, list[int]]]:
+        if isinstance(n, bool) or not isinstance(n, int):
+            raise ValueError(f"Vertex n must be an int, got {n!r}")
+        if n < 1 or n > self.vertex_count:
+            raise ValueError(
+                f"Start vertex n must be between 1 and {self.vertex_count}, got {n}"
+            )
+
+        adj = self.adjacency_list()
+        for neighbors in adj:
+            for neighbor in neighbors:
+                if neighbor.w < 0:
+                    raise ValueError(
+                        "Dijkstra's algorithm requires non-negative edge weights"
+                    )
+
+        count = self.vertex_count
+        start = n - 1
+        dist: list[int | float] = [math.inf] * count
+        prev: list[int | None] = [None] * count
+        dist[start] = 0
+        ready = [False] * count
+
+        for _ in range(count):
+            u = -1
+            best_dist = math.inf
+            for candidate in range(count):
+                if not ready[candidate] and dist[candidate] < best_dist:
+                    best_dist = dist[candidate]
+                    u = candidate
+            if u == -1:
+                break
+            ready[u] = True
+
+            for neighbor in adj[u]:
+                v = neighbor.v - 1
+                if not ready[v]:
+                    new_dist = dist[u] + neighbor.w
+                    if dist[v] > new_dist:
+                        dist[v] = new_dist
+                        prev[v] = u
+
+        paths: dict[int, tuple[int | float, list[int]]] = {}
+        for v in range(count):
+            if dist[v] == math.inf:
+                paths[v + 1] = (math.inf, [])
+                continue
+            path: list[int] = []
+            curr: int | None = v
+            while curr is not None:
+                path.append(curr + 1)
+                curr = prev[curr]
+            path.reverse()
+            paths[v + 1] = (dist[v], path)
+        return paths
