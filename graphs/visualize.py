@@ -31,6 +31,33 @@ def _subgraph_edges(subgraph: Graph | None, vertex_count: int) -> set[tuple[int,
     return edges
 
 
+def _edge_collides_with_vertex(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    positions: list[tuple[float, float]],
+    u_idx: int,
+    v_idx: int,
+    threshold: float,
+) -> bool:
+    dx = x2 - x1
+    dy = y2 - y1
+    len_sq = dx * dx + dy * dy
+    if len_sq == 0:
+        return False
+    for k, (xk, yk) in enumerate(positions):
+        if k in (u_idx, v_idx):
+            continue
+        t = ((xk - x1) * dx + (yk - y1) * dy) / len_sq
+        if 0.0 < t < 1.0:
+            px = x1 + t * dx
+            py = y1 + t * dy
+            if math.hypot(xk - px, yk - py) < threshold:
+                return True
+    return False
+
+
 def _draw_graph(
     canvas: tk.Canvas,
     adj: AdjacencyList,
@@ -56,29 +83,47 @@ def _draw_graph(
                 else:
                     edge_color, edge_width, text_color = "#334155", 2, "#0f172a"
 
-                canvas.create_line(
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    fill=edge_color,
-                    width=edge_width,
-                )
+                mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+                if _edge_collides_with_vertex(
+                    x1, y1, x2, y2, positions, u_idx, v_idx, vertex_radius + 4
+                ):
+                    dx, dy = x2 - x1, y2 - y1
+                    length = math.hypot(dx, dy)
+                    nx, ny = -dy / length, dx / length
+                    side = 1 if (u_idx + v_idx) % 2 == 0 else -1
+                    bow = 60.0 * side
+                    cx, cy = mx + bow * nx, my + bow * ny
+                    canvas.create_line(
+                        [x1, y1, cx, cy, x2, y2],
+                        smooth=True,
+                        fill=edge_color,
+                        width=edge_width,
+                    )
+                    label_x, label_y = mx + 0.5 * bow * nx, my + 0.5 * bow * ny
+                else:
+                    canvas.create_line(
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        fill=edge_color,
+                        width=edge_width,
+                    )
+                    label_x, label_y = mx, my
                 if show_weights:
-                    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
                     label = str(neighbor.w)
                     pad_x = max(8, 4 * len(label) + 4)
                     canvas.create_rectangle(
-                        mx - pad_x,
-                        my - 8,
-                        mx + pad_x,
-                        my + 8,
+                        label_x - pad_x,
+                        label_y - 8,
+                        label_x + pad_x,
+                        label_y + 8,
                         fill="white",
                         outline="",
                     )
                     canvas.create_text(
-                        mx,
-                        my,
+                        label_x,
+                        label_y,
                         text=label,
                         fill=text_color,
                         font=("TkDefaultFont", 10, "bold"),
@@ -131,20 +176,28 @@ def _compute_layered_columns(
     if n == 0:
         return {}
 
-    layer: dict[int, int] = {}
+    bfs_dist: dict[int, int] = {}
     roots = [start_vertex] + [v for v in range(1, n + 1) if v != start_vertex]
     for root_vertex in roots:
-        if root_vertex in layer:
+        if root_vertex in bfs_dist:
             continue
-        layer[root_vertex] = 0
+        bfs_dist[root_vertex] = 0
         queue = deque([root_vertex])
         while queue:
             u = queue.popleft()
             for neighbor in adj[u - 1]:
                 v = neighbor.v
-                if v not in layer:
-                    layer[v] = layer[u] + 1
+                if v not in bfs_dist:
+                    bfs_dist[v] = bfs_dist[u] + 1
                     queue.append(v)
+
+    topo_order = sorted(range(1, n + 1), key=lambda v: (bfs_dist[v], v))
+    rank = {v: idx for idx, v in enumerate(topo_order)}
+
+    layer: dict[int, int] = {}
+    for v in topo_order:
+        preds = [nb.v for nb in adj[v - 1] if rank[nb.v] < rank[v]]
+        layer[v] = max((layer[p] for p in preds), default=-1) + 1
 
     columns: dict[int, list[int]] = defaultdict(list)
     for vertex, col in layer.items():

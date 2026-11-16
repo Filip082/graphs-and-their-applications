@@ -130,7 +130,8 @@ def test_compute_layered_columns_structure() -> None:
     assert columns[0] == [1]
     placed = [v for col in columns.values() for v in col]
     assert sorted(placed) == list(range(1, 13))
-    assert set(columns[1]) == {2, 3, 5}
+    assert [len(columns[i]) for i in range(6)] == [1, 2, 3, 3, 2, 1]
+    assert set(columns[1]) == {2, 3}
 
 
 def test_show_weights_toggle() -> None:
@@ -188,3 +189,23 @@ def test_invalid_subgraph_vertex_count() -> None:
         visualize.circular(g, show=False, subgraph=other)
     with pytest.raises(ValueError, match="Subgraph must have 2 vertices"):
         visualize.layered(g, show=False, subgraph=other)
+
+
+def test_layered_curves_collinear_edges() -> None:
+    g = Graph(_adj([[2, 3], [1, 3], [1, 2]]), "adjacency_list")
+    try:
+        root = visualize.layered(g, show=False)
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        canvases = [w for w in root.winfo_children() if isinstance(w, tk.Canvas)]
+        canvas = canvases[0]
+        curved = [
+            i
+            for i in canvas.find_all()
+            if canvas.type(i) == "line" and len(canvas.coords(i)) > 4
+        ]
+        assert len(curved) == 1
+    finally:
+        root.destroy()
