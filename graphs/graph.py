@@ -139,16 +139,46 @@ class Graph:
         return indices
 
     @staticmethod
+    def _validate_weight_range(min_weight: int, max_weight: int) -> None:
+        if isinstance(min_weight, bool) or not isinstance(min_weight, int):
+            raise ValueError(f"min_weight must be an int, got {min_weight!r}")
+        if isinstance(max_weight, bool) or not isinstance(max_weight, int):
+            raise ValueError(f"max_weight must be an int, got {max_weight!r}")
+        if min_weight > max_weight:
+            raise ValueError(
+                f"min_weight ({min_weight}) must be <= max_weight ({max_weight})"
+            )
+        if min_weight == 0 and max_weight == 0:
+            raise ValueError("Weight range [0, 0] contains no non-zero weights")
+
+    @staticmethod
+    def _draw_weights(
+        rng: np.random.Generator,
+        size: int,
+        min_weight: int = 1,
+        max_weight: int = 10,
+    ) -> NDArray[np.int64]:
+        Graph._validate_weight_range(min_weight, max_weight)
+        if min_weight > 0 or max_weight < 0:
+            return rng.integers(min_weight, max_weight + 1, size=size, dtype=np.int64)
+        # Skip 0 since 0 denotes no edge in adjacency matrices.
+        vals = rng.integers(min_weight, max_weight, size=size, dtype=np.int64)
+        vals[vals >= 0] += 1
+        return vals
+
+    @staticmethod
     def _random_weighted_matrix(
         n: int,
         rows: NDArray[np.intp],
         cols: NDArray[np.intp],
         rng: np.random.Generator,
         directed: bool = False,
+        min_weight: int = 1,
+        max_weight: int = 10,
     ) -> "Graph":
         matrix = np.zeros((n, n), dtype=np.int64)
         if len(rows) > 0:
-            weights = rng.integers(1, 11, size=len(rows), dtype=np.int64)
+            weights = Graph._draw_weights(rng, len(rows), min_weight, max_weight)
             matrix[rows, cols] = weights
             if not directed:
                 matrix[cols, rows] = weights
@@ -156,8 +186,14 @@ class Graph:
 
     @staticmethod
     def create_random_binomial(
-        n: int, p: float, connected: bool = False, directed: bool = False
+        n: int,
+        p: float,
+        connected: bool = False,
+        directed: bool = False,
+        min_weight: int = 1,
+        max_weight: int = 10,
     ) -> "Graph":
+        Graph._validate_weight_range(min_weight, max_weight)
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         if not 0.0 <= p <= 1.0:
@@ -173,7 +209,13 @@ class Graph:
         if connected:
             mask[Graph._random_spanning_tree_indices(n, rng, directed)] = True
         return Graph._random_weighted_matrix(
-            n, rows[mask], cols[mask], rng, directed=directed
+            n,
+            rows[mask],
+            cols[mask],
+            rng,
+            directed=directed,
+            min_weight=min_weight,
+            max_weight=max_weight,
         )
 
     @staticmethod
@@ -182,7 +224,10 @@ class Graph:
         l: int,  # noqa: E741
         connected: bool = False,
         directed: bool = False,
+        min_weight: int = 1,
+        max_weight: int = 10,
     ) -> "Graph":
+        Graph._validate_weight_range(min_weight, max_weight)
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         max_edges = n * (n - 1) if directed else n * (n - 1) // 2
@@ -205,12 +250,24 @@ class Graph:
                 available = np.flatnonzero(~mask)
                 mask[rng.choice(available, size=l - (n - 1), replace=False)] = True
             return Graph._random_weighted_matrix(
-                n, rows[mask], cols[mask], rng, directed=directed
+                n,
+                rows[mask],
+                cols[mask],
+                rng,
+                directed=directed,
+                min_weight=min_weight,
+                max_weight=max_weight,
             )
 
         chosen = rng.choice(len(rows), size=l, replace=False)
         return Graph._random_weighted_matrix(
-            n, rows[chosen], cols[chosen], rng, directed=directed
+            n,
+            rows[chosen],
+            cols[chosen],
+            rng,
+            directed=directed,
+            min_weight=min_weight,
+            max_weight=max_weight,
         )
 
     def adjacency_list(self) -> AdjacencyList:
@@ -272,15 +329,19 @@ class Graph:
             [[Neighbor(v + 1, 1) for v in neighbors] for neighbors in adj]
         )
 
-    def _randomize_weights(self, rng: np.random.Generator | None = None) -> None:
+    def _randomize_weights(
+        self,
+        rng: np.random.Generator | None = None,
+        min_weight: int = 1,
+        max_weight: int = 10,
+    ) -> None:
         rng = rng or np.random.default_rng()
         adj = self.adjacency_list()
-        weights = {
-            (u, nb.v - 1): int(rng.integers(1, 11))
-            for u, nbs in enumerate(adj)
-            for nb in nbs
-            if u < nb.v - 1
-        }
+        pairs = [
+            (u, nb.v - 1) for u, nbs in enumerate(adj) for nb in nbs if u < nb.v - 1
+        ]
+        drawn = Graph._draw_weights(rng, len(pairs), min_weight, max_weight)
+        weights = {pair: int(w) for pair, w in zip(pairs, drawn, strict=True)}
         self._set_from_adjacency_list(
             [
                 [
@@ -397,7 +458,14 @@ class Graph:
             self._set_from_zero_based_adj([sorted(s) for s in adj_sets])
 
     @staticmethod
-    def create_random_k_regular(n: int, k: int, connected: bool = False) -> "Graph":
+    def create_random_k_regular(
+        n: int,
+        k: int,
+        connected: bool = False,
+        min_weight: int = 1,
+        max_weight: int = 10,
+    ) -> "Graph":
+        Graph._validate_weight_range(min_weight, max_weight)
         if n < 0 or k < 0 or (n == 0 and k > 0) or (n > 0 and (k >= n or n * k % 2)):
             raise ValueError(f"Cannot create {k}-regular simple graph on {n} vertices")
         if connected and ((n >= 2 and k == 0) or (n >= 3 and k == 1)):
@@ -410,11 +478,17 @@ class Graph:
             graph.randomize(max(10, n * k * 2))
             if connected:
                 graph._connect_components()
-            graph._randomize_weights()
+            graph._randomize_weights(min_weight=min_weight, max_weight=max_weight)
         return graph
 
     @staticmethod
-    def create_random_eulerian(n: int = 6, connected: bool = True) -> "Graph":
+    def create_random_eulerian(
+        n: int = 6,
+        connected: bool = True,
+        min_weight: int = 1,
+        max_weight: int = 10,
+    ) -> "Graph":
+        Graph._validate_weight_range(min_weight, max_weight)
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         if n == 2:
@@ -437,7 +511,7 @@ class Graph:
         graph.randomize(n * 4)
         if connected:
             graph._connect_components()
-        graph._randomize_weights(rng)
+        graph._randomize_weights(rng, min_weight=min_weight, max_weight=max_weight)
         return graph
 
     def connected_components(self) -> list[list[int]]:

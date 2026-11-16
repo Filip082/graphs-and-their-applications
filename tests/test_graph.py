@@ -729,6 +729,35 @@ def test_random_generators_directed() -> None:
     _assert_weights_in_range(g_uni_conn)
 
 
+def test_random_generators_weight_bounds() -> None:
+    g_neg = Graph.create_random_binomial(
+        8, 1.0, directed=True, min_weight=-5, max_weight=5
+    )
+    assert int(np.count_nonzero(g_neg.adjacency_matrix())) == 56
+    _assert_weights_in_range(g_neg, low=-5, high=5)
+
+    g_exact = Graph.create_random_uniform(
+        5, 6, directed=True, min_weight=-3, max_weight=-3
+    )
+    _assert_weights_in_range(g_exact, low=-3, high=-3)
+
+    g_reg = Graph.create_random_k_regular(6, 2, min_weight=-4, max_weight=-1)
+    _assert_weights_in_range(g_reg, low=-4, high=-1)
+
+    g_eul = Graph.create_random_eulerian(5, min_weight=2, max_weight=2)
+    _assert_weights_in_range(g_eul, low=2, high=2)
+
+    for bad_min, bad_max in [(5, 2), (0, 0), (True, 5), (1, False)]:
+        with pytest.raises(ValueError):
+            Graph.create_random_binomial(4, 0.5, min_weight=bad_min, max_weight=bad_max)
+        with pytest.raises(ValueError):
+            Graph.create_random_uniform(4, 3, min_weight=bad_min, max_weight=bad_max)
+        with pytest.raises(ValueError):
+            Graph.create_random_k_regular(4, 2, min_weight=bad_min, max_weight=bad_max)
+        with pytest.raises(ValueError):
+            Graph.create_random_eulerian(4, min_weight=bad_min, max_weight=bad_max)
+
+
 def _task4_example_graph() -> Graph:
     return Graph(
         [
