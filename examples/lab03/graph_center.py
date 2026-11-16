@@ -33,7 +33,7 @@ def main() -> None:
     print(f"Centrum minimax = {minimax_v} (odleglosc od najdalszego: {minimax_dist})")
 
     if not args.no_gui:
-        visualize.layered(graph, title=f"Graph center (n={args.n})")
+        visualize.layered(graph, title=f"Graph center (n={args.n})", show_weights=True)
 
 
 if __name__ == "__main__":

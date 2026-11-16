@@ -60,7 +60,11 @@ def main() -> None:
             mst_to_show = kruskal_mst
 
     if not args.no_gui and mst_to_show is not None:
-        visualize.layered(mst_to_show, title=f"Minimum Spanning Tree (n={args.n})")
+        visualize.layered(
+            mst_to_show,
+            title=f"Minimum Spanning Tree (n={args.n})",
+            show_weights=True,
+        )
 
 
 if __name__ == "__main__":

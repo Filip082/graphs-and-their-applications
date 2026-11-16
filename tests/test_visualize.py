@@ -131,3 +131,24 @@ def test_compute_layered_columns_structure() -> None:
     placed = [v for col in columns.values() for v in col]
     assert sorted(placed) == list(range(1, 13))
     assert set(columns[1]) == {2, 3, 5}
+
+
+def test_show_weights_toggle() -> None:
+    adj = [
+        [Neighbor(2, 5), Neighbor(3, 9)],
+        [Neighbor(1, 5)],
+        [Neighbor(1, 9)],
+    ]
+    g = Graph(adj, "adjacency_list")
+    try:
+        root_circular = visualize.circular(g, show=False, show_weights=True)
+        root_layered = visualize.layered(g, show=False, show_weights=True)
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        assert _get_canvas_counts(root_circular) == (2, 4, 5)
+        assert _get_canvas_counts(root_layered) == (2, 3, 5)
+    finally:
+        root_circular.destroy()
+        root_layered.destroy()

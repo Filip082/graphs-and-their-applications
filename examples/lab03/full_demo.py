@@ -59,7 +59,7 @@ def main() -> None:
         print(f"  {u} - {v} (w={w})")
 
     if not args.no_gui:
-        visualize.layered(mst, title=f"Lab 03 MST (n={args.n})")
+        visualize.layered(mst, title=f"Lab 03 MST (n={args.n})", show_weights=True)
 
 
 if __name__ == "__main__":

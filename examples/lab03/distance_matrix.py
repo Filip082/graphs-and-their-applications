@@ -32,7 +32,9 @@ def main() -> None:
         print(" ".join(f"{int(val):>{width}}" for val in row))
 
     if not args.no_gui:
-        visualize.layered(graph, title=f"Distance matrix graph (n={args.n})")
+        visualize.layered(
+            graph, title=f"Distance matrix graph (n={args.n})", show_weights=True
+        )
 
 
 if __name__ == "__main__":

@@ -36,7 +36,10 @@ def main() -> None:
 
     if not args.no_gui:
         visualize.layered(
-            graph, start_vertex=args.start, title=f"Dijkstra from s={args.start}"
+            graph,
+            start_vertex=args.start,
+            title=f"Dijkstra from s={args.start}",
+            show_weights=True,
         )
 
 

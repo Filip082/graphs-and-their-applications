@@ -48,7 +48,7 @@ def main() -> None:
     print(graph.adjacency_matrix())
 
     if not args.no_gui:
-        visualize.layered(graph, title=title)
+        visualize.layered(graph, title=title, show_weights=True)
 
 
 if __name__ == "__main__":

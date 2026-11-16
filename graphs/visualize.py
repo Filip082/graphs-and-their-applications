@@ -20,6 +20,7 @@ def _draw_graph(
     adj: AdjacencyList,
     positions: list[tuple[float, float]],
     vertex_radius: int,
+    show_weights: bool = False,
 ) -> None:
     for u_idx, neighbors in enumerate(adj):
         x1, y1 = positions[u_idx]
@@ -28,6 +29,25 @@ def _draw_graph(
             if u_idx < v_idx:
                 x2, y2 = positions[v_idx]
                 canvas.create_line(x1, y1, x2, y2, fill="#334155", width=2)
+                if show_weights:
+                    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+                    label = str(neighbor.w)
+                    pad_x = max(8, 4 * len(label) + 4)
+                    canvas.create_rectangle(
+                        mx - pad_x,
+                        my - 8,
+                        mx + pad_x,
+                        my + 8,
+                        fill="white",
+                        outline="",
+                    )
+                    canvas.create_text(
+                        mx,
+                        my,
+                        text=label,
+                        fill="#0f172a",
+                        font=("TkDefaultFont", 10, "bold"),
+                    )
 
     for i, (x, y) in enumerate(positions):
         canvas.create_oval(
@@ -115,6 +135,7 @@ def circular(
     vertex_radius: int = 16,
     title: str = "Graph",
     show: bool = True,
+    show_weights: bool = False,
 ) -> tk.Tk:
     root, canvas = _create_canvas(title, size, size)
 
@@ -138,7 +159,13 @@ def circular(
             y = center + r * math.sin(angle)
             positions.append((x, y))
 
-        _draw_graph(canvas, graph.adjacency_list(), positions, vertex_radius)
+        _draw_graph(
+            canvas,
+            graph.adjacency_list(),
+            positions,
+            vertex_radius,
+            show_weights=show_weights,
+        )
 
     return _finish_window(root, canvas, show)
 
@@ -152,6 +179,7 @@ def layered(
     start_vertex: int = 1,
     title: str = "Graph",
     show: bool = True,
+    show_weights: bool = False,
 ) -> tk.Tk:
     n = graph.vertex_count
     if n > 0 and not 1 <= start_vertex <= n:
@@ -183,6 +211,12 @@ def layered(
                     y = margin_y + row_idx * row_spacing
                 positions[vertex - 1] = (x, y)
 
-        _draw_graph(canvas, adj, positions, vertex_radius)
+        _draw_graph(
+            canvas,
+            adj,
+            positions,
+            vertex_radius,
+            show_weights=show_weights,
+        )
 
     return _finish_window(root, canvas, show)
