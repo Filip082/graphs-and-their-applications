@@ -174,13 +174,11 @@ def test_weighted_all_six_conversions() -> None:
     [
         [[Neighbor(0, 1)]],
         [[Neighbor(1, 1)]],
-        [[Neighbor(2, 1)], []],
         [[Neighbor(3, 1)], []],
         [[Neighbor(2, 1), Neighbor(2, 1)], [Neighbor(1, 1)]],
         [[(True, 1)], []],
         [[(2, True)], [(1, 1)]],
         [[Neighbor(2, 0)], [Neighbor(1, 0)]],
-        [[Neighbor(2, 3)], [Neighbor(1, 4)]],
         [[2], [1]],
     ],
 )
@@ -194,13 +192,39 @@ def test_invalid_adjacency_list(bad_list: Any) -> None:
     [
         [[0, 1]],
         [[1, 0], [0, 0]],
-        [[0, 1], [0, 0]],
         [0, 1],
     ],
 )
 def test_invalid_adjacency_matrix(bad_matrix: Any) -> None:
     with pytest.raises(ValueError):
         convert.adjacency_matrix_to_adjacency_list(bad_matrix)
+
+
+def test_directed_weighted_conversions() -> None:
+    digraph_list: AdjacencyList = [
+        [Neighbor(2, 4), Neighbor(3, -2)],
+        [Neighbor(1, -1)],
+        [Neighbor(2, 5)],
+    ]
+    digraph_matrix = np.array(
+        [
+            [0, 4, -2],
+            [-1, 0, 0],
+            [0, 5, 0],
+        ],
+        dtype=np.int64,
+    )
+
+    np.testing.assert_array_equal(
+        convert.adjacency_list_to_adjacency_matrix(digraph_list),
+        digraph_matrix,
+    )
+    assert convert.adjacency_matrix_to_adjacency_list(digraph_matrix) == digraph_list
+
+    with pytest.raises(ValueError):
+        convert.adjacency_list_to_incidence_matrix(digraph_list)
+    with pytest.raises(ValueError):
+        convert.adjacency_matrix_to_incidence_matrix(digraph_matrix)
 
 
 @pytest.mark.parametrize(

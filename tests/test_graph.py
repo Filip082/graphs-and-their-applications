@@ -636,3 +636,66 @@ def test_prim_and_kruskal_edge_cases() -> None:
         disconnected.prim()
     with pytest.raises(ValueError):
         disconnected.kruskal()
+
+
+def test_digraph_with_negative_weights_and_from_file(tmp_path: Path) -> None:
+    digraph_file = tmp_path / "digraph.txt"
+    digraph_file.write_text("1: 2 5 3 -2\n2: 3 1\n3: 1 4\n", encoding="utf-8")
+
+    g = Graph.from_file(digraph_file, "adjacency_list", weighted=True)
+    expected_adj = [
+        [Neighbor(2, 5), Neighbor(3, -2)],
+        [Neighbor(3, 1)],
+        [Neighbor(1, 4)],
+    ]
+    expected_mat = np.array(
+        [
+            [0, 5, -2],
+            [0, 0, 1],
+            [4, 0, 0],
+        ],
+        dtype=np.int64,
+    )
+    assert g.adjacency_list() == expected_adj
+    np.testing.assert_array_equal(g.adjacency_matrix(), expected_mat)
+
+    g_mat = Graph(expected_mat, "adjacency_matrix")
+    assert g_mat.adjacency_list() == expected_adj
+
+    with pytest.raises(ValueError):
+        g.incidence_matrix()
+    with pytest.raises(ValueError):
+        g.dijkstra(1)
+
+    for method in (
+        lambda: g.randomize(1),
+        g.connected_components,
+        g.largest_connected_component,
+        g.find_euler_cycle,
+        g.is_hamiltonian,
+        g.prim,
+        g.kruskal,
+    ):
+        with pytest.raises(ValueError):
+            method()
+
+
+def test_digraph_dijkstra_positive_weights() -> None:
+    g = Graph(
+        [
+            [Neighbor(2, 2), Neighbor(3, 10)],
+            [Neighbor(3, 3)],
+            [],
+        ],
+        "adjacency_list",
+    )
+    assert g.dijkstra(1) == {
+        1: (0, [1]),
+        2: (2, [1, 2]),
+        3: (5, [1, 2, 3]),
+    }
+    assert g.dijkstra(3) == {
+        1: (math.inf, []),
+        2: (math.inf, []),
+        3: (0, [3]),
+    }

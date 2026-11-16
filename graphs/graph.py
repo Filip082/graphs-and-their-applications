@@ -221,6 +221,13 @@ class Graph:
             cast(AdjacencyMatrix, self.data)
         )
 
+    def _require_symmetric(self, operation: str) -> None:
+        mat = self.adjacency_matrix()
+        if not np.array_equal(mat, mat.T):
+            raise ValueError(
+                f"{operation} is only supported for symmetric (undirected) graphs"
+            )
+
     def _zero_based_adj(self) -> list[list[int]]:
         return [
             [neighbor.v - 1 for neighbor in neighbors]
@@ -286,6 +293,7 @@ class Graph:
     def randomize(self, n: int) -> None:
         if n < 0:
             raise ValueError("Number of randomization steps n must be non-negative")
+        self._require_symmetric("randomize")
         if n == 0:
             return
 
@@ -408,6 +416,7 @@ class Graph:
         return graph
 
     def connected_components(self) -> list[list[int]]:
+        self._require_symmetric("connected_components")
         if self.vertex_count == 0:
             return []
         comp = _components_of(self._zero_based_adj())
@@ -420,6 +429,7 @@ class Graph:
         return max(self.connected_components(), key=len, default=[])
 
     def find_euler_cycle(self) -> list[int] | None:
+        self._require_symmetric("find_euler_cycle")
         if self.vertex_count == 0:
             return []
         adj = self._zero_based_adj()
@@ -458,6 +468,7 @@ class Graph:
         return [v + 1 for v in cycle]
 
     def is_hamiltonian(self) -> bool:
+        self._require_symmetric("is_hamiltonian")
         n = self.vertex_count
         if n < 3:
             return False
@@ -567,6 +578,7 @@ class Graph:
         return Graph(mst_adj, "adjacency_list")
 
     def prim(self) -> "Graph":
+        self._require_symmetric("prim")
         count = self.vertex_count
         if count <= 1:
             return Graph._graph_from_weighted_edges(count, [])
@@ -596,6 +608,7 @@ class Graph:
         return Graph._graph_from_weighted_edges(count, mst_edges)
 
     def kruskal(self) -> "Graph":
+        self._require_symmetric("kruskal")
         count = self.vertex_count
         if count <= 1:
             return Graph._graph_from_weighted_edges(count, [])

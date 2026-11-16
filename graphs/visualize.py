@@ -20,7 +20,6 @@ def _subgraph_edges(
         (u_idx, neighbor.v - 1)
         for u_idx, neighbors in enumerate(subgraph.adjacency_list())
         for neighbor in neighbors
-        if u_idx < neighbor.v - 1
     }
 
 
@@ -50,6 +49,38 @@ def _edge_collides_with_vertex(
     return False
 
 
+def _shorten_endpoint(
+    sx: float, sy: float, ex: float, ey: float, offset: float
+) -> tuple[float, float]:
+    dx, dy = ex - sx, ey - sy
+    length = math.hypot(dx, dy)
+    if length <= offset or length == 0:
+        return ex, ey
+    return ex - offset * dx / length, ey - offset * dy / length
+
+
+def _draw_line(
+    canvas: tk.Canvas,
+    coords: list[float],
+    *,
+    smooth: bool,
+    fill: str,
+    width: float,
+    arrow: bool,
+) -> None:
+    if arrow:
+        canvas.create_line(
+            coords,
+            smooth=smooth,
+            fill=fill,
+            width=width,
+            arrow=tk.LAST,
+            arrowshape=(10, 12, 4),
+        )
+    else:
+        canvas.create_line(coords, smooth=smooth, fill=fill, width=width)
+
+
 def _draw_graph(
     canvas: tk.Canvas,
     adj: AdjacencyList,
@@ -57,17 +88,27 @@ def _draw_graph(
     vertex_radius: int,
     show_weights: bool = False,
     subgraph_edges: set[tuple[int, int]] | None = None,
+    arrow: bool = False,
 ) -> None:
     highlighted = subgraph_edges or set()
+    edge_set = {
+        (u_idx, neighbor.v - 1)
+        for u_idx, neighbors in enumerate(adj)
+        for neighbor in neighbors
+    }
 
     for u_idx, neighbors in enumerate(adj):
         x1, y1 = positions[u_idx]
         for neighbor in neighbors:
             v_idx = neighbor.v - 1
-            if u_idx >= v_idx:
+            has_opposite = (v_idx, u_idx) in edge_set
+            if not arrow and has_opposite and u_idx >= v_idx:
                 continue
             x2, y2 = positions[v_idx]
-            if (u_idx, v_idx) in highlighted:
+            is_highlighted = (u_idx, v_idx) in highlighted or (
+                not arrow and (v_idx, u_idx) in highlighted
+            )
+            if is_highlighted:
                 edge_color, edge_width, text_color = "#2563eb", 4, "#1d4ed8"
             elif subgraph_edges is not None:
                 edge_color, edge_width, text_color = "#cbd5e1", 1.5, "#64748b"
@@ -75,22 +116,47 @@ def _draw_graph(
                 edge_color, edge_width, text_color = "#334155", 2, "#0f172a"
 
             mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-            if _edge_collides_with_vertex(
+            collides = _edge_collides_with_vertex(
                 x1, y1, x2, y2, positions, u_idx, v_idx, vertex_radius + 4
-            ):
+            )
+            if collides or (arrow and has_opposite):
                 dx, dy = x2 - x1, y2 - y1
                 length = math.hypot(dx, dy)
-                nx, ny = -dy / length, dx / length
-                bow = 60.0 * (1 if (u_idx + v_idx) % 2 == 0 else -1)
-                canvas.create_line(
-                    [x1, y1, mx + bow * nx, my + bow * ny, x2, y2],
+                nx, ny = (-dy / length, dx / length) if length else (0.0, 0.0)
+                if collides:
+                    use_pos = (arrow and has_opposite) or (u_idx + v_idx) % 2 == 0
+                    bow = 60.0 if use_pos else -60.0
+                else:
+                    bow = 28.0
+                cx, cy = mx + bow * nx, my + bow * ny
+                ex, ey = (
+                    _shorten_endpoint(cx, cy, x2, y2, vertex_radius)
+                    if arrow
+                    else (x2, y2)
+                )
+                _draw_line(
+                    canvas,
+                    [x1, y1, cx, cy, ex, ey],
                     smooth=True,
                     fill=edge_color,
                     width=edge_width,
+                    arrow=arrow,
                 )
                 label_x, label_y = mx + 0.5 * bow * nx, my + 0.5 * bow * ny
             else:
-                canvas.create_line(x1, y1, x2, y2, fill=edge_color, width=edge_width)
+                ex, ey = (
+                    _shorten_endpoint(x1, y1, x2, y2, vertex_radius)
+                    if arrow
+                    else (x2, y2)
+                )
+                _draw_line(
+                    canvas,
+                    [x1, y1, ex, ey],
+                    smooth=False,
+                    fill=edge_color,
+                    width=edge_width,
+                    arrow=arrow,
+                )
                 label_x, label_y = mx, my
 
             if show_weights:
@@ -149,11 +215,16 @@ def _compute_layered_columns(
                     bfs_dist[neighbor.v] = bfs_dist[u] + 1
                     queue.append(neighbor.v)
 
+    in_neighbors: list[list[int]] = [[] for _ in range(n + 1)]
+    for u, neighbors in enumerate(adj, start=1):
+        for neighbor in neighbors:
+            in_neighbors[neighbor.v].append(u)
+
     topo_order = sorted(range(1, n + 1), key=lambda v: (bfs_dist[v], v))
     rank = {v: idx for idx, v in enumerate(topo_order)}
     layer: dict[int, int] = {}
     for v in topo_order:
-        preds = [nb.v for nb in adj[v - 1] if rank[nb.v] < rank[v]]
+        preds = [u for u in in_neighbors[v] if rank[u] < rank[v]]
         layer[v] = max((layer[p] for p in preds), default=-1) + 1
 
     columns: dict[int, list[int]] = defaultdict(list)
@@ -163,7 +234,7 @@ def _compute_layered_columns(
         nodes.sort()
 
     def barycenter(vertex: int, pos_in_prev: dict[int, int]) -> float:
-        parents = [nb.v for nb in adj[vertex - 1] if nb.v in pos_in_prev]
+        parents = [u for u in in_neighbors[vertex] if u in pos_in_prev]
         return sum(pos_in_prev[p] for p in parents) / len(parents) if parents else 0.0
 
     max_col = max(columns)
@@ -184,6 +255,7 @@ def _render_graph(
     show: bool,
     show_weights: bool,
     subgraph: Graph | None,
+    arrow: bool,
     layout: Callable[[tk.Canvas, AdjacencyList], list[tuple[float, float]]],
 ) -> tk.Tk:
     sub_edges = _subgraph_edges(subgraph, graph.vertex_count)
@@ -196,7 +268,9 @@ def _render_graph(
     if graph.vertex_count > 0:
         adj = graph.adjacency_list()
         positions = layout(canvas, adj)
-        _draw_graph(canvas, adj, positions, vertex_radius, show_weights, sub_edges)
+        _draw_graph(
+            canvas, adj, positions, vertex_radius, show_weights, sub_edges, arrow
+        )
 
     if show:
         root.lift()
@@ -216,6 +290,7 @@ def circular(
     show: bool = True,
     show_weights: bool = False,
     subgraph: Graph | None = None,
+    arrow: bool = False,
 ) -> tk.Tk:
     def layout(canvas: tk.Canvas, adj: AdjacencyList) -> list[tuple[float, float]]:
         n = len(adj)
@@ -239,7 +314,16 @@ def circular(
         ]
 
     return _render_graph(
-        graph, size, size, vertex_radius, title, show, show_weights, subgraph, layout
+        graph,
+        size,
+        size,
+        vertex_radius,
+        title,
+        show,
+        show_weights,
+        subgraph,
+        arrow,
+        layout,
     )
 
 
@@ -254,6 +338,7 @@ def layered(
     show: bool = True,
     show_weights: bool = False,
     subgraph: Graph | None = None,
+    arrow: bool = False,
 ) -> tk.Tk:
     n = graph.vertex_count
     if n > 0 and not 1 <= start_vertex <= n:
@@ -281,5 +366,14 @@ def layered(
         return positions
 
     return _render_graph(
-        graph, width, height, vertex_radius, title, show, show_weights, subgraph, layout
+        graph,
+        width,
+        height,
+        vertex_radius,
+        title,
+        show,
+        show_weights,
+        subgraph,
+        arrow,
+        layout,
     )

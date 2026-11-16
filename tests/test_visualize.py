@@ -209,3 +209,47 @@ def test_layered_curves_collinear_edges() -> None:
         assert len(curved) == 1
     finally:
         root.destroy()
+
+
+def test_arrow_option() -> None:
+    g = Graph(
+        [
+            [Neighbor(2, 3)],
+            [Neighbor(1, -1)],
+            [Neighbor(1, 2)],
+        ],
+        "adjacency_list",
+    )
+    sub = Graph([[Neighbor(2, 3)], [], []], "adjacency_list")
+    try:
+        root_no_arrow = visualize.circular(g, show=False)
+        root_arrow = visualize.circular(
+            g, show=False, show_weights=True, subgraph=sub, arrow=True
+        )
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        assert _get_canvas_counts(root_no_arrow) == (2, 4, 3)
+        canvases_no = [
+            w for w in root_no_arrow.winfo_children() if isinstance(w, tk.Canvas)
+        ]
+        lines_no = [
+            i for i in canvases_no[0].find_all() if canvases_no[0].type(i) == "line"
+        ]
+        assert all(canvases_no[0].itemcget(i, "arrow") == "none" for i in lines_no)
+
+        assert _get_canvas_counts(root_arrow) == (3, 4, 6)
+        canvases_yes = [
+            w for w in root_arrow.winfo_children() if isinstance(w, tk.Canvas)
+        ]
+        canvas = canvases_yes[0]
+        lines_yes = [i for i in canvas.find_all() if canvas.type(i) == "line"]
+        assert all(canvas.itemcget(i, "arrow") == "last" for i in lines_yes)
+        curved = [i for i in lines_yes if len(canvas.coords(i)) > 4]
+        assert len(curved) == 2
+        highlighted = [i for i in lines_yes if canvas.itemcget(i, "fill") == "#2563eb"]
+        assert len(highlighted) == 1
+    finally:
+        root_no_arrow.destroy()
+        root_arrow.destroy()

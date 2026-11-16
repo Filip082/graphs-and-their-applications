@@ -23,6 +23,8 @@ def _validate_adjacency_list(adjacency_list: AdjacencyListInput) -> AdjacencyLis
     for u, neighbors in enumerate(adjacency_list, start=1):
         weights: dict[int, int] = {}
         for item in neighbors:
+            if not isinstance(item, tuple) or len(item) != 2:
+                raise ValueError(f"Invalid adjacency list entry: {item!r}")
             v = _parse_int(item[0], "vertex index")
             w = _parse_int(item[1], "edge weight")
             if v < 1 or v > n:
@@ -35,11 +37,6 @@ def _validate_adjacency_list(adjacency_list: AdjacencyListInput) -> AdjacencyLis
                 raise ValueError(f"Edge weight cannot be 0 (edge {u}-{v})")
             weights[v] = w
         neighbor_weights.append(weights)
-
-    for u, weights in enumerate(neighbor_weights, start=1):
-        for v, w in weights.items():
-            if neighbor_weights[v - 1].get(u) != w:
-                raise ValueError(f"Asymmetric edge or weight between {u} and {v}")
 
     return [
         sorted(Neighbor(v, w) for v, w in weights.items())
@@ -55,8 +52,6 @@ def _validate_adjacency_matrix(
         raise ValueError("Adjacency matrix must be a square 2D array")
     if not np.all(np.diag(arr) == 0):
         raise ValueError("Adjacency matrix must not have self-loops")
-    if not np.array_equal(arr, arr.T):
-        raise ValueError("Adjacency matrix must be symmetric")
     return arr.copy()
 
 
@@ -92,6 +87,10 @@ def _matrix_to_list(matrix: AdjacencyMatrix) -> AdjacencyList:
 
 
 def _matrix_to_incidence(matrix: AdjacencyMatrix) -> IncidenceMatrix:
+    if not np.array_equal(matrix, matrix.T):
+        raise ValueError(
+            "Incidence matrix is only supported for symmetric (undirected) graphs"
+        )
     n = matrix.shape[0]
     rows, cols = np.nonzero(np.triu(matrix, k=1))
     m = len(rows)
