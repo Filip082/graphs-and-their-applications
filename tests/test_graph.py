@@ -561,3 +561,78 @@ def test_center_and_minimax_edge_cases() -> None:
         disconnected.center()
     with pytest.raises(ValueError):
         disconnected.minimax()
+
+
+def _mst_edge_count_and_weight(tree: Graph) -> tuple[int, int]:
+    edges = [
+        (u_idx, neighbor.v - 1, neighbor.w)
+        for u_idx, neighbors in enumerate(tree.adjacency_list())
+        for neighbor in neighbors
+        if u_idx < neighbor.v - 1
+    ]
+    return len(edges), sum(w for _, _, w in edges)
+
+
+def test_prim_and_kruskal_task3_example() -> None:
+    adj_list = [
+        [Neighbor(2, 3), Neighbor(3, 2), Neighbor(5, 9)],
+        [Neighbor(1, 3), Neighbor(4, 2), Neighbor(5, 4)],
+        [Neighbor(1, 2), Neighbor(5, 6), Neighbor(6, 9)],
+        [Neighbor(2, 2), Neighbor(7, 3)],
+        [
+            Neighbor(1, 9),
+            Neighbor(2, 4),
+            Neighbor(3, 6),
+            Neighbor(7, 1),
+            Neighbor(8, 2),
+        ],
+        [Neighbor(3, 9), Neighbor(8, 1), Neighbor(9, 2)],
+        [Neighbor(4, 3), Neighbor(5, 1), Neighbor(10, 5)],
+        [
+            Neighbor(5, 2),
+            Neighbor(6, 1),
+            Neighbor(10, 5),
+            Neighbor(11, 6),
+            Neighbor(12, 9),
+        ],
+        [Neighbor(6, 2), Neighbor(11, 2)],
+        [Neighbor(7, 5), Neighbor(8, 5), Neighbor(12, 5)],
+        [Neighbor(8, 6), Neighbor(9, 2), Neighbor(12, 3)],
+        [Neighbor(8, 9), Neighbor(10, 5), Neighbor(11, 3)],
+    ]
+    g = Graph(adj_list, "adjacency_list")
+    orig_matrix = g.adjacency_matrix()
+
+    for tree in (g.prim(), g.kruskal()):
+        assert tree.vertex_count == 12
+        assert len(tree.connected_components()) == 1
+        edge_count, total_weight = _mst_edge_count_and_weight(tree)
+        assert edge_count == 11
+        assert total_weight == 26
+        for u_idx, neighbors in enumerate(tree.adjacency_list()):
+            for neighbor in neighbors:
+                assert orig_matrix[u_idx, neighbor.v - 1] == neighbor.w
+
+
+def test_prim_and_kruskal_edge_cases() -> None:
+    empty = Graph([], "adjacency_list")
+    assert empty.prim().vertex_count == 0
+    assert empty.kruskal().vertex_count == 0
+
+    single = Graph([[]], "adjacency_list")
+    assert single.prim().adjacency_list() == [[]]
+    assert single.kruskal().adjacency_list() == [[]]
+
+    disconnected = Graph(
+        [
+            [Neighbor(2, 4)],
+            [Neighbor(1, 4)],
+            [Neighbor(4, 2)],
+            [Neighbor(3, 2)],
+        ],
+        "adjacency_list",
+    )
+    with pytest.raises(ValueError):
+        disconnected.prim()
+    with pytest.raises(ValueError):
+        disconnected.kruskal()

@@ -1,3 +1,4 @@
+import heapq
 import math
 import sys
 from collections import deque
@@ -651,3 +652,87 @@ class Graph:
         maxes = dist.max(axis=1)
         idx = int(np.argmin(maxes))
         return idx + 1, int(maxes[idx])
+
+    @staticmethod
+    def _graph_from_weighted_edges(
+        count: int, edges: list[tuple[int, int, int]]
+    ) -> "Graph":
+        mst_adj: AdjacencyList = [[] for _ in range(count)]
+        for u, v, w in edges:
+            mst_adj[u].append(Neighbor(v + 1, w))
+            mst_adj[v].append(Neighbor(u + 1, w))
+        return Graph(mst_adj, "adjacency_list")
+
+    def prim(self) -> "Graph":
+        count = self.vertex_count
+        if count <= 1:
+            return Graph._graph_from_weighted_edges(count, [])
+
+        adj = self.adjacency_list()
+        in_tree = [False] * count
+        in_tree[0] = True
+        tree_count = 1
+        heap: list[tuple[int, int, int]] = [
+            (neighbor.w, 0, neighbor.v - 1) for neighbor in adj[0]
+        ]
+        heapq.heapify(heap)
+        mst_edges: list[tuple[int, int, int]] = []
+
+        while heap and tree_count < count:
+            w, u, v = heapq.heappop(heap)
+            if in_tree[v]:
+                continue
+            in_tree[v] = True
+            tree_count += 1
+            mst_edges.append((u, v, w))
+            for neighbor in adj[v]:
+                nxt = neighbor.v - 1
+                if not in_tree[nxt]:
+                    heapq.heappush(heap, (neighbor.w, v, nxt))
+
+        if tree_count < count:
+            raise ValueError("Cannot find spanning tree for a disconnected graph")
+        return Graph._graph_from_weighted_edges(count, mst_edges)
+
+    def kruskal(self) -> "Graph":
+        count = self.vertex_count
+        if count <= 1:
+            return Graph._graph_from_weighted_edges(count, [])
+
+        adj = self.adjacency_list()
+        edges = sorted(
+            (neighbor.w, u, neighbor.v - 1)
+            for u, neighbors in enumerate(adj)
+            for neighbor in neighbors
+            if u < neighbor.v - 1
+        )
+        parent = list(range(count))
+        rank = [0] * count
+
+        def find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: int, b: int) -> bool:
+            ra, rb = find(a), find(b)
+            if ra == rb:
+                return False
+            if rank[ra] < rank[rb]:
+                ra, rb = rb, ra
+            parent[rb] = ra
+            if rank[ra] == rank[rb]:
+                rank[ra] += 1
+            return True
+
+        mst_edges: list[tuple[int, int, int]] = []
+        for w, u, v in edges:
+            if union(u, v):
+                mst_edges.append((u, v, w))
+                if len(mst_edges) == count - 1:
+                    break
+
+        if len(mst_edges) < count - 1:
+            raise ValueError("Cannot find spanning tree for a disconnected graph")
+        return Graph._graph_from_weighted_edges(count, mst_edges)
