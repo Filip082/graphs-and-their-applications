@@ -108,6 +108,16 @@ def test_random_binomial() -> None:
         Graph.create_random_binomial(-1, 0.5)
     with pytest.raises(ValueError):
         Graph.create_random_binomial(4, 1.5)
+    with pytest.raises(ValueError):
+        Graph.create_random_binomial(3, 0.0, connected=True)
+
+    g_conn = Graph.create_random_binomial(10, 0.01, connected=True)
+    assert len(g_conn.connected_components()) == 1
+    _assert_weights_in_range(g_conn)
+    assert (
+        len(Graph.create_random_binomial(1, 0.0, connected=True).connected_components())
+        == 1
+    )
 
 
 def test_random_uniform() -> None:
@@ -127,6 +137,14 @@ def test_random_uniform() -> None:
         Graph.create_random_uniform(-1, 0)
     with pytest.raises(ValueError):
         Graph.create_random_uniform(4, 7)
+    with pytest.raises(ValueError):
+        Graph.create_random_uniform(5, 3, connected=True)
+
+    for edges in (7, 10):
+        g_conn = Graph.create_random_uniform(8, edges, connected=True)
+        assert g_conn.incidence_matrix().shape == (8, edges)
+        assert len(g_conn.connected_components()) == 1
+        _assert_weights_in_range(g_conn)
 
 
 def test_from_sequence() -> None:
@@ -182,6 +200,17 @@ def test_create_random_k_regular() -> None:
         with pytest.raises(ValueError):
             Graph.create_random_k_regular(n, k)
 
+    for n, k in [(2, 1), (6, 2), (8, 3), (10, 2)]:
+        g_conn = Graph.create_random_k_regular(n, k, connected=True)
+        assert g_conn.vertex_count == n
+        assert all(len(neighbors) == k for neighbors in g_conn.adjacency_list())
+        assert len(g_conn.connected_components()) == 1
+        _assert_weights_in_range(g_conn)
+
+    for n, k in [(2, 0), (4, 1)]:
+        with pytest.raises(ValueError):
+            Graph.create_random_k_regular(n, k, connected=True)
+
 
 def _verify_euler_cycle(graph: Graph, cycle: list[int]) -> None:
     adj = graph.adjacency_list()
@@ -206,7 +235,7 @@ def test_create_random_eulerian_and_find_euler_cycle() -> None:
     assert Graph.create_random_eulerian(1).find_euler_cycle() == [1]
 
     for n in (3, 4, 5, 6, 8, 10):
-        g = Graph.create_random_eulerian(n)
+        g = Graph.create_random_eulerian(n, connected=True)
         assert g.vertex_count == n
         assert all(len(neighbors) % 2 == 0 for neighbors in g.adjacency_list())
         assert len(g.largest_connected_component()) == n

@@ -93,17 +93,35 @@ class Graph:
         raise ValueError(f"Unsupported graph data type: {type!r}")
 
     @staticmethod
-    def create_random_binomial(n: int, p: float) -> "Graph":
+    def _random_spanning_tree_edges(
+        n: int, rng: np.random.Generator
+    ) -> list[tuple[int, int]]:
+        perm = rng.permutation(n)
+        edges: list[tuple[int, int]] = []
+        for i in range(1, n):
+            u = int(perm[i])
+            v = int(perm[int(rng.integers(0, i))])
+            edges.append((min(u, v), max(u, v)))
+        return edges
+
+    @staticmethod
+    def create_random_binomial(n: int, p: float, connected: bool = False) -> "Graph":
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         if not 0.0 <= p <= 1.0:
             raise ValueError("Probability p must be between 0.0 and 1.0")
+        if connected and n >= 2 and p == 0.0:
+            raise ValueError("Cannot create a connected graph with n >= 2 and p == 0.0")
 
         matrix = np.zeros((n, n), dtype=np.int64)
         if n > 1:
             rng = np.random.default_rng()
             rows, cols = np.triu_indices(n, k=1)
             mask = rng.random(len(rows)) < p
+            if connected:
+                for u, v in Graph._random_spanning_tree_edges(n, rng):
+                    idx = u * (2 * n - u - 1) // 2 + (v - u - 1)
+                    mask[idx] = True
             edge_rows = rows[mask]
             edge_cols = cols[mask]
             weights = rng.integers(1, 11, size=len(edge_rows), dtype=np.int64)
@@ -112,18 +130,44 @@ class Graph:
         return Graph(matrix, "adjacency_matrix")
 
     @staticmethod
-    def create_random_uniform(n: int, l: int) -> "Graph":  # noqa: E741
+    def create_random_uniform(
+        n: int,
+        l: int,  # noqa: E741
+        connected: bool = False,
+    ) -> "Graph":
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         max_edges = n * (n - 1) // 2
         if l < 0 or l > max_edges:
             raise ValueError(f"Number of edges l must be between 0 and {max_edges}")
+        if connected and n >= 2 and l < n - 1:
+            raise ValueError(
+                f"Cannot create a connected graph on {n} vertices "
+                f"with fewer than {n - 1} edges"
+            )
 
         matrix = np.zeros((n, n), dtype=np.int64)
         if l > 0:
             rng = np.random.default_rng()
             rows, cols = np.triu_indices(n, k=1)
-            chosen = rng.choice(len(rows), size=l, replace=False)
+            if connected and n >= 2:
+                tree_indices = [
+                    u * (2 * n - u - 1) // 2 + (v - u - 1)
+                    for u, v in Graph._random_spanning_tree_edges(n, rng)
+                ]
+                remaining_count = l - (n - 1)
+                if remaining_count > 0:
+                    is_tree = np.zeros(len(rows), dtype=bool)
+                    is_tree[tree_indices] = True
+                    available = np.flatnonzero(~is_tree)
+                    extra = rng.choice(available, size=remaining_count, replace=False)
+                    chosen = np.concatenate(
+                        [np.array(tree_indices, dtype=np.intp), extra]
+                    )
+                else:
+                    chosen = np.array(tree_indices, dtype=np.intp)
+            else:
+                chosen = rng.choice(len(rows), size=l, replace=False)
             weights = rng.integers(1, 11, size=l, dtype=np.int64)
             matrix[rows[chosen], cols[chosen]] = weights
             matrix[cols[chosen], rows[chosen]] = weights
@@ -316,8 +360,55 @@ class Graph:
 
         self._set_from_zero_based_adj([sorted(neighbors) for neighbors in adj_sets])
 
+    def _connect_components(self) -> None:
+        comp = self._components()
+        while max(comp) > 1:
+            num_comp = len(set(comp))
+            adj_sets = [set(neighbors) for neighbors in self._zero_based_adj()]
+            c1_edges: list[tuple[int, int]] = []
+            other_edges: list[tuple[int, int]] = []
+            for u, neighbors in enumerate(adj_sets):
+                for v in neighbors:
+                    if u < v:
+                        if comp[u] == 1:
+                            c1_edges.append((u, v))
+                        else:
+                            other_edges.append((u, v))
+            if not c1_edges or not other_edges:
+                break
+
+            merged = False
+            for a, b in c1_edges:
+                for c, d in other_edges:
+                    adj_sets[a].remove(b)
+                    adj_sets[b].remove(a)
+                    adj_sets[c].remove(d)
+                    adj_sets[d].remove(c)
+                    adj_sets[a].add(d)
+                    adj_sets[d].add(a)
+                    adj_sets[b].add(c)
+                    adj_sets[c].add(b)
+                    self._set_from_zero_based_adj([sorted(s) for s in adj_sets])
+                    new_comp = self._components()
+                    if len(set(new_comp)) < num_comp:
+                        comp = new_comp
+                        merged = True
+                        break
+                    adj_sets[a].remove(d)
+                    adj_sets[d].remove(a)
+                    adj_sets[b].remove(c)
+                    adj_sets[c].remove(b)
+                    adj_sets[a].add(b)
+                    adj_sets[b].add(a)
+                    adj_sets[c].add(d)
+                    adj_sets[d].add(c)
+                if merged:
+                    break
+            if not merged:
+                break
+
     @staticmethod
-    def create_random_k_regular(n: int, k: int) -> "Graph":
+    def create_random_k_regular(n: int, k: int, connected: bool = False) -> "Graph":
         if n < 0 or k < 0:
             raise ValueError("n and k must be non-negative")
         if n == 0 and k > 0:
@@ -326,15 +417,25 @@ class Graph:
             )
         if n > 0 and (k >= n or (n * k) % 2 != 0):
             raise ValueError(f"Cannot create {k}-regular simple graph on {n} vertices")
+        if connected and n >= 2 and k == 0:
+            raise ValueError(
+                f"Cannot create a connected 0-regular graph on {n} vertices"
+            )
+        if connected and n >= 3 and k == 1:
+            raise ValueError(
+                f"Cannot create a connected 1-regular graph on {n} vertices"
+            )
 
         graph = Graph.from_sequence([k] * n)
         if n > 0 and k > 0:
             graph.randomize(max(10, n * k * 2))
+            if connected:
+                graph._connect_components()
             graph._randomize_weights()
         return graph
 
     @staticmethod
-    def create_random_eulerian(n: int = 6) -> "Graph":
+    def create_random_eulerian(n: int = 6, connected: bool = True) -> "Graph":
         if n < 0:
             raise ValueError("Number of vertices n must be non-negative")
         if n == 2:
@@ -357,38 +458,8 @@ class Graph:
 
         graph = Graph.from_sequence(seq)
         graph.randomize(n * 4)
-
-        comp = graph._components()
-        while max(comp) > 1:
-            adj_sets = [set(neighbors) for neighbors in graph._zero_based_adj()]
-            edge_in_c1: tuple[int, int] | None = None
-            edge_in_other: tuple[int, int] | None = None
-            for u, neighbors in enumerate(adj_sets):
-                for v in neighbors:
-                    if u < v:
-                        if comp[u] == 1 and edge_in_c1 is None:
-                            edge_in_c1 = (u, v)
-                        elif comp[u] != 1 and edge_in_other is None:
-                            edge_in_other = (u, v)
-                    if edge_in_c1 is not None and edge_in_other is not None:
-                        break
-                if edge_in_c1 is not None and edge_in_other is not None:
-                    break
-            if edge_in_c1 is None or edge_in_other is None:
-                break
-            a, b = edge_in_c1
-            c, d = edge_in_other
-            adj_sets[a].remove(b)
-            adj_sets[b].remove(a)
-            adj_sets[c].remove(d)
-            adj_sets[d].remove(c)
-            adj_sets[a].add(d)
-            adj_sets[d].add(a)
-            adj_sets[b].add(c)
-            adj_sets[c].add(b)
-            graph._set_from_zero_based_adj([sorted(s) for s in adj_sets])
-            comp = graph._components()
-
+        if connected:
+            graph._connect_components()
         graph._randomize_weights(rng)
         return graph
 
