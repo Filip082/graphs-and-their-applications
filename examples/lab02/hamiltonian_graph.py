@@ -5,31 +5,15 @@ from typing import cast
 from graphs import Graph, GraphType, visualize
 
 
-def _default_graph() -> Graph:
-    return Graph(
-        [
-            [2, 5, 7],
-            [1, 3, 6, 8],
-            [2, 4, 7],
-            [3, 5, 6, 8],
-            [1, 4, 8],
-            [2, 4, 7, 8],
-            [1, 3, 6],
-            [2, 4, 5, 6],
-        ],
-        "adjacency_list",
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Check whether a graph is Hamiltonian."
+        description="Check whether a graph (from file or random) is Hamiltonian."
     )
     parser.add_argument(
         "--file",
         type=Path,
         default=None,
-        help="Optional path to an input graph file.",
+        help="Path to an input graph file (generates a random graph if omitted).",
     )
     parser.add_argument(
         "--type",
@@ -39,11 +23,16 @@ def main() -> None:
         help="Representation used in --file.",
     )
     parser.add_argument(
-        "--sequence",
+        "--n",
         type=int,
-        nargs="*",
-        default=None,
-        help="Optional graphic sequence to construct the graph from.",
+        default=8,
+        help="Number of vertices for random graph generation.",
+    )
+    parser.add_argument(
+        "--p",
+        type=float,
+        default=0.5,
+        help="Edge probability for random graph generation.",
     )
     parser.add_argument(
         "--no-gui",
@@ -54,10 +43,8 @@ def main() -> None:
 
     if args.file is not None:
         graph = Graph.from_file(args.file, cast(GraphType, args.data_type))
-    elif args.sequence is not None:
-        graph = Graph.from_sequence(args.sequence)
     else:
-        graph = _default_graph()
+        graph = Graph.create_random_binomial(args.n, args.p)
 
     print("Adjacency list:")
     for u, neighbors in enumerate(graph.adjacency_list(), start=1):

@@ -139,13 +139,16 @@ def test_create_random_eulerian_and_find_euler_cycle() -> None:
 
 
 def test_largest_connected_component() -> None:
+    assert Graph([], "adjacency_list").connected_components() == []
     assert Graph([], "adjacency_list").largest_connected_component() == []
+    assert Graph([[]], "adjacency_list").connected_components() == [[1]]
     assert Graph([[]], "adjacency_list").largest_connected_component() == [1]
 
     g = Graph(
         [[2], [1], [4, 5], [3, 5], [3, 4], []],
         "adjacency_list",
     )
+    assert g.connected_components() == [[1, 2], [3, 4, 5], [6]]
     assert g.largest_connected_component() == [3, 4, 5]
 
 

@@ -8,6 +8,17 @@ def _print_adjacency_list(graph: Graph) -> None:
         print(f"{u}: {' '.join(str(v) for v in neighbors)}".rstrip())
 
 
+def _print_components(graph: Graph) -> None:
+    components = graph.connected_components()
+    if not components:
+        print("Graf jest pusty.")
+        return
+    for idx, vertices in enumerate(components, start=1):
+        print(f"{idx}) {' '.join(str(v) for v in vertices)}")
+    largest_idx = max(range(len(components)), key=lambda i: len(components[i])) + 1
+    print(f"Najwieksza skladowa ma numer {largest_idx}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -43,7 +54,8 @@ def main() -> None:
     graph = Graph.from_sequence(args.sequence)
     print("\nConstructed graph (adjacency list):")
     _print_adjacency_list(graph)
-    print(f"\nLargest connected component: {graph.largest_connected_component()}")
+    print()
+    _print_components(graph)
 
     if not args.no_gui:
         visualize.on_circle(graph, title="Graph from graphic sequence")
@@ -52,7 +64,8 @@ def main() -> None:
         graph.randomize(args.randomize)
         print(f"\nAfter {args.randomize} randomizations (adjacency list):")
         _print_adjacency_list(graph)
-        print(f"\nLargest connected component: {graph.largest_connected_component()}")
+        print()
+        _print_components(graph)
         if not args.no_gui:
             visualize.on_circle(
                 graph,

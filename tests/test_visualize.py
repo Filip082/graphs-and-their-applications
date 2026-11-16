@@ -21,7 +21,7 @@ def test_on_circle_draws_vertices_and_edges() -> None:
         ovals = [i for i in items if canvas.type(i) == "oval"]
         texts = [i for i in items if canvas.type(i) == "text"]
         assert len(lines) == 2
-        assert len(ovals) == 4
+        assert len(ovals) == 5
         assert len(texts) == 4
     finally:
         root.destroy()

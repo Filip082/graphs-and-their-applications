@@ -1,5 +1,5 @@
 import sys
-from collections import Counter, deque
+from collections import deque
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal, cast
@@ -330,13 +330,21 @@ class Graph:
 
         return graph
 
-    def largest_connected_component(self) -> list[int]:
+    def connected_components(self) -> list[list[int]]:
         if self.vertex_count == 0:
             return []
         comp = self._components()
-        counts = Counter(comp)
-        largest_id = max(counts, key=lambda cid: counts[cid])
-        return [v + 1 for v, cid in enumerate(comp) if cid == largest_id]
+        num_components = max(comp)
+        groups: list[list[int]] = [[] for _ in range(num_components)]
+        for v_idx, cid in enumerate(comp):
+            groups[cid - 1].append(v_idx + 1)
+        return groups
+
+    def largest_connected_component(self) -> list[int]:
+        components = self.connected_components()
+        if not components:
+            return []
+        return max(components, key=len)
 
     def find_euler_cycle(self) -> list[int] | None:
         if self.vertex_count == 0:

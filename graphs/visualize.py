@@ -24,6 +24,15 @@ def on_circle(
     if n > 0:
         center = size / 2
         r = radius if radius is not None else size * 0.36
+        canvas.create_oval(
+            center - r,
+            center - r,
+            center + r,
+            center + r,
+            outline="red",
+            width=1,
+            dash=(4, 4),
+        )
         positions: list[tuple[float, float]] = []
         for i in range(n):
             angle = 2 * math.pi * i / n - math.pi / 2
