@@ -503,3 +503,61 @@ def test_distance_matrix_edge_cases() -> None:
     )
     with pytest.raises(ValueError):
         disconnected.distance_matrix()
+
+
+def test_center_and_minimax_task3_example() -> None:
+    adj_list = [
+        [Neighbor(2, 3), Neighbor(3, 2), Neighbor(5, 9)],
+        [Neighbor(1, 3), Neighbor(4, 2), Neighbor(5, 4)],
+        [Neighbor(1, 2), Neighbor(5, 6), Neighbor(6, 9)],
+        [Neighbor(2, 2), Neighbor(7, 3)],
+        [
+            Neighbor(1, 9),
+            Neighbor(2, 4),
+            Neighbor(3, 6),
+            Neighbor(7, 1),
+            Neighbor(8, 2),
+        ],
+        [Neighbor(3, 9), Neighbor(8, 1), Neighbor(9, 2)],
+        [Neighbor(4, 3), Neighbor(5, 1), Neighbor(10, 5)],
+        [
+            Neighbor(5, 2),
+            Neighbor(6, 1),
+            Neighbor(10, 5),
+            Neighbor(11, 6),
+            Neighbor(12, 9),
+        ],
+        [Neighbor(6, 2), Neighbor(11, 2)],
+        [Neighbor(7, 5), Neighbor(8, 5), Neighbor(12, 5)],
+        [Neighbor(8, 6), Neighbor(9, 2), Neighbor(12, 3)],
+        [Neighbor(8, 9), Neighbor(10, 5), Neighbor(11, 3)],
+    ]
+    g = Graph(adj_list, "adjacency_list")
+    assert g.center() == (5, 55)
+    assert g.minimax() == (8, 9)
+
+
+def test_center_and_minimax_edge_cases() -> None:
+    single = Graph([[]], "adjacency_list")
+    assert single.center() == (1, 0)
+    assert single.minimax() == (1, 0)
+
+    empty = Graph([], "adjacency_list")
+    with pytest.raises(ValueError):
+        empty.center()
+    with pytest.raises(ValueError):
+        empty.minimax()
+
+    disconnected = Graph(
+        [
+            [Neighbor(2, 4)],
+            [Neighbor(1, 4)],
+            [Neighbor(4, 2)],
+            [Neighbor(3, 2)],
+        ],
+        "adjacency_list",
+    )
+    with pytest.raises(ValueError):
+        disconnected.center()
+    with pytest.raises(ValueError):
+        disconnected.minimax()

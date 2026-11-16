@@ -635,3 +635,19 @@ class Graph:
                     )
                 matrix[u - 1, v - 1] = int(dist)
         return matrix
+
+    def center(self) -> tuple[int, int]:
+        if self.vertex_count == 0:
+            raise ValueError("Cannot find center of an empty graph")
+        dist = self.distance_matrix()
+        sums = dist.sum(axis=1)
+        idx = int(np.argmin(sums))
+        return idx + 1, int(sums[idx])
+
+    def minimax(self) -> tuple[int, int]:
+        if self.vertex_count == 0:
+            raise ValueError("Cannot find minimax center of an empty graph")
+        dist = self.distance_matrix()
+        maxes = dist.max(axis=1)
+        idx = int(np.argmin(maxes))
+        return idx + 1, int(maxes[idx])
