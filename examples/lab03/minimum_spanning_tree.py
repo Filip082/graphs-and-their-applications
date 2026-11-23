@@ -5,8 +5,8 @@ from typing import cast
 from graphs import Graph, GraphType, visualize
 
 
-def _mst_edges(mst: Graph) -> list[tuple[int, int, int]]:
-    edges: list[tuple[int, int, int]] = []
+def _mst_edges(mst: Graph) -> list[tuple[int, int, int | float]]:
+    edges: list[tuple[int, int, int | float]] = []
     for u, neighbors in enumerate(mst.adjacency_list(), start=1):
         for nb in neighbors:
             if u < nb.v:

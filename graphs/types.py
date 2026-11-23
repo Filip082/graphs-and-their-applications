@@ -11,14 +11,20 @@ GraphType = Literal[
     "directed_incidence_matrix",
 ]
 
+Weight = int | float
+
 
 class Neighbor(NamedTuple):
     v: int
-    w: int = 1
+    w: Weight = 1
 
 
 AdjacencyList = list[list[Neighbor]]
-AdjacencyListInput = Sequence[Sequence[tuple[int, int]]]
-AdjacencyMatrix = NDArray[np.int64]
-IncidenceMatrix = NDArray[np.int64]
-MatrixInput = NDArray[np.integer] | Sequence[Sequence[int]]
+AdjacencyListInput = Sequence[Sequence[tuple[int, int] | tuple[int, float]]]
+AdjacencyMatrix = NDArray[np.int64 | np.float64]
+IncidenceMatrix = NDArray[np.int64 | np.float64]
+MatrixInput = (
+    NDArray[np.integer | np.floating]
+    | Sequence[Sequence[int]]
+    | Sequence[Sequence[float]]
+)

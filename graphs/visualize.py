@@ -1,7 +1,7 @@
 import math
 import tkinter as tk
 from collections import defaultdict, deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 
 from graphs.graph import Graph
 from graphs.types import AdjacencyList
@@ -395,3 +395,73 @@ def layered(
         layout,
         edge_labels,
     )
+
+
+def planar_tour(
+    points: Sequence[tuple[float, float]],
+    tour: Sequence[int],
+    *,
+    width: int = 800,
+    height: int = 600,
+    vertex_radius: int = 4,
+    title: str = "TSP Tour",
+    show: bool = True,
+) -> tk.Tk:
+    n = len(points)
+    if len(tour) != n or (n > 0 and set(tour) != set(range(1, n + 1))):
+        raise ValueError(f"tour must be a permutation of 1..{n}")
+
+    root = tk.Tk()
+    root.title(title)
+    canvas = tk.Canvas(root, width=width, height=height, bg="white")
+    canvas.pack(fill=tk.BOTH, expand=True)
+    root.update_idletasks()
+
+    if n > 0:
+        margin = 40.0
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        span_x = max_x - min_x
+        span_y = max_y - min_y
+        usable_w = max(1.0, width - 2 * margin)
+        usable_h = max(1.0, height - 2 * margin)
+        scale = min(
+            usable_w / span_x if span_x > 0 else float("inf"),
+            usable_h / span_y if span_y > 0 else float("inf"),
+        )
+        if math.isinf(scale):
+            scale = 1.0
+        offset_x = (width - span_x * scale) / 2
+        offset_y = (height - span_y * scale) / 2
+
+        coords = [
+            (
+                offset_x + (x - min_x) * scale,
+                height - (offset_y + (y - min_y) * scale),
+            )
+            for x, y in points
+        ]
+
+        for idx in range(n):
+            x1, y1 = coords[tour[idx] - 1]
+            x2, y2 = coords[tour[(idx + 1) % n] - 1]
+            canvas.create_line(x1, y1, x2, y2, fill="#dc2626", width=2)
+
+        for cx, cy in coords:
+            canvas.create_oval(
+                cx - vertex_radius,
+                cy - vertex_radius,
+                cx + vertex_radius,
+                cy + vertex_radius,
+                fill="#1d4ed8",
+                outline="#1e3a8a",
+            )
+
+    if show:
+        root.lift()
+        root.update()
+        root.after(50, canvas.update)
+        root.mainloop()
+    return root

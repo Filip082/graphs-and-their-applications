@@ -122,6 +122,21 @@ class Graph:
         raise ValueError(f"Unsupported graph data type: {type!r}")
 
     @staticmethod
+    def from_points(points: Sequence[tuple[float, float]]) -> "Graph":
+        n = len(points)
+        if n == 0:
+            return Graph(np.zeros((0, 0), dtype=np.float64), "adjacency_matrix")
+        coords = np.asarray(points, dtype=np.float64)
+        if coords.ndim != 2 or coords.shape[1] != 2:
+            raise ValueError("points must be a sequence of (x, y) pairs")
+        if not np.all(np.isfinite(coords)):
+            raise ValueError("point coordinates must be finite")
+        diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+        dist = np.hypot(diff[:, :, 0], diff[:, :, 1])
+        np.fill_diagonal(dist, 0.0)
+        return Graph(dist, "adjacency_matrix")
+
+    @staticmethod
     def _candidate_pairs(
         n: int, directed: bool
     ) -> tuple[NDArray[np.intp], NDArray[np.intp]]:
@@ -780,7 +795,7 @@ class Graph:
 
     @staticmethod
     def _bellman_ford_raw(
-        adj: list[list[tuple[int, int]]], start: int
+        adj: list[list[tuple[int, int | float]]], start: int
     ) -> tuple[list[int | float], list[int | None]]:
         count = len(adj)
         dist: list[int | float] = [math.inf] * count
@@ -824,7 +839,7 @@ class Graph:
 
     @staticmethod
     def _dijkstra_distances(
-        adj: list[list[tuple[int, int]]], start: int
+        adj: list[list[tuple[int, int | float]]], start: int
     ) -> list[int | float]:
         count = len(adj)
         dist: list[int | float] = [math.inf] * count
@@ -852,9 +867,7 @@ class Graph:
         adj.append([(v, 0) for v in range(count)])
 
         h, _ = self._bellman_ford_raw(adj, count)
-        adj_hat = [
-            [(v, w + int(h[u]) - int(h[v])) for v, w in adj[u]] for u in range(count)
-        ]
+        adj_hat = [[(v, w + h[u] - h[v]) for v, w in adj[u]] for u in range(count)]
 
         matrix = np.zeros((count, count), dtype=np.float64)
         for u in range(count):
@@ -892,7 +905,7 @@ class Graph:
 
     @staticmethod
     def _graph_from_weighted_edges(
-        count: int, edges: list[tuple[int, int, int]]
+        count: int, edges: list[tuple[int, int, int | float]]
     ) -> "Graph":
         mst_adj: AdjacencyList = [[] for _ in range(count)]
         for u, v, w in edges:
@@ -910,9 +923,11 @@ class Graph:
         in_tree = [False] * count
         in_tree[0] = True
         tree_count = 1
-        heap: list[tuple[int, int, int]] = [(nb.w, 0, nb.v - 1) for nb in adj[0]]
+        heap: list[tuple[int | float, int, int]] = [
+            (nb.w, 0, nb.v - 1) for nb in adj[0]
+        ]
         heapq.heapify(heap)
-        mst_edges: list[tuple[int, int, int]] = []
+        mst_edges: list[tuple[int, int, int | float]] = []
 
         while heap and tree_count < count:
             w, u, v = heapq.heappop(heap)
@@ -951,7 +966,7 @@ class Graph:
                 x = parent[x]
             return x
 
-        mst_edges: list[tuple[int, int, int]] = []
+        mst_edges: list[tuple[int, int, int | float]] = []
         for w, u, v in edges:
             ra, rb = find(u), find(v)
             if ra == rb:
@@ -971,7 +986,7 @@ class Graph:
 
     @staticmethod
     def _bfs_augmenting_path(
-        residual: NDArray[np.int64], source: int, sink: int
+        residual: AdjacencyMatrix, source: int, sink: int
     ) -> list[int | None] | None:
         count = int(residual.shape[0])
         dist: list[int | float] = [math.inf] * count
@@ -1027,3 +1042,164 @@ class Graph:
 
         flow_matrix = np.maximum(0, cap - residual)
         return max_flow, Graph(flow_matrix, "adjacency_matrix")
+
+    def pagerank_random_walk(
+        self,
+        d: float = 0.15,
+        steps: int = 1_000_000,
+        seed: int | None = None,
+    ) -> NDArray[np.float64]:
+        if not 0.0 <= d <= 1.0:
+            raise ValueError(f"Teleportation probability d must be in [0, 1], got {d}")
+        if isinstance(steps, bool) or steps <= 0:
+            raise ValueError(f"steps must be a positive integer, got {steps}")
+
+        n = self.vertex_count
+        if n == 0:
+            return np.array([], dtype=np.float64)
+
+        adj = self._zero_based_adj()
+        rng = np.random.default_rng(seed)
+        visits = np.zeros(n, dtype=np.int64)
+        current = int(rng.integers(0, n))
+
+        for _ in range(steps):
+            visits[current] += 1
+            neighbors = adj[current]
+            if not neighbors or rng.random() < d:
+                current = int(rng.integers(0, n))
+            else:
+                current = neighbors[int(rng.integers(0, len(neighbors)))]
+
+        return visits.astype(np.float64) / steps
+
+    def pagerank_power_iteration(
+        self,
+        d: float = 0.15,
+        max_iter: int = 10_000,
+        tol: float = 1e-12,
+    ) -> NDArray[np.float64]:
+        if not 0.0 <= d <= 1.0:
+            raise ValueError(f"Teleportation probability d must be in [0, 1], got {d}")
+        if isinstance(max_iter, bool) or max_iter <= 0:
+            raise ValueError(f"max_iter must be a positive integer, got {max_iter}")
+        if tol < 0.0:
+            raise ValueError(f"tol must be non-negative, got {tol}")
+
+        n = self.vertex_count
+        if n == 0:
+            return np.array([], dtype=np.float64)
+
+        adj = (self.adjacency_matrix() != 0).astype(np.float64)
+        out_deg = adj.sum(axis=1)
+        p_mat = np.full((n, n), 1.0 / n, dtype=np.float64)
+        non_dangling = out_deg > 0
+        p_mat[non_dangling] = (1.0 - d) * (
+            adj[non_dangling] / out_deg[non_dangling, np.newaxis]
+        ) + d / n
+
+        p = np.full(n, 1.0 / n, dtype=np.float64)
+        burn_in = max_iter // 2
+        avg_accum = np.zeros(n, dtype=np.float64)
+        avg_count = 0
+
+        for step in range(max_iter):
+            p_next = p @ p_mat
+            if float(np.sum(np.abs(p_next - p))) < tol:
+                return p_next
+            p = p_next
+            if step >= burn_in:
+                avg_accum += p
+                avg_count += 1
+
+        return avg_accum / avg_count if avg_count > 0 else p
+
+    def tour_length(self, tour: Sequence[int]) -> float:
+        n = self.vertex_count
+        if len(tour) != n:
+            raise ValueError(f"tour length ({len(tour)}) must match vertex_count ({n})")
+        if n == 0:
+            return 0.0
+        if set(tour) != set(range(1, n + 1)):
+            raise ValueError(f"tour must be a permutation of 1..{n}")
+        mat = self.adjacency_matrix()
+        return sum(float(mat[tour[i] - 1, tour[(i + 1) % n] - 1]) for i in range(n))
+
+    def simulated_annealing_tsp(
+        self,
+        *,
+        max_iter: int = 2000,
+        temperatures: Sequence[float] | None = None,
+        restarts: int = 1,
+        initial_tour: Sequence[int] | None = None,
+        seed: int | None = None,
+    ) -> tuple[list[int], float]:
+        if isinstance(max_iter, bool) or max_iter <= 0:
+            raise ValueError(f"max_iter must be a positive integer, got {max_iter}")
+        if isinstance(restarts, bool) or restarts <= 0:
+            raise ValueError(f"restarts must be a positive integer, got {restarts}")
+
+        self._require_symmetric("simulated_annealing_tsp")
+        n = self.vertex_count
+        if n == 0:
+            if initial_tour is not None and len(initial_tour) != 0:
+                raise ValueError("initial_tour must be empty when graph has 0 vertices")
+            return [], 0.0
+
+        dist = self.adjacency_matrix()
+
+        if initial_tour is not None:
+            if len(initial_tour) != n or set(initial_tour) != set(range(1, n + 1)):
+                raise ValueError(f"initial_tour must be a permutation of 1..{n}")
+            start_tour = [v - 1 for v in initial_tour]
+        else:
+            start_tour = list(range(n))
+
+        if n < 4:
+            one_based = [v + 1 for v in start_tour]
+            return one_based, self.tour_length(one_based)
+
+        schedule = (
+            [0.001 * i * i for i in range(100, 0, -1)]
+            if temperatures is None
+            else list(temperatures)
+        )
+        if not schedule or any(t <= 0.0 for t in schedule):
+            raise ValueError(
+                "temperatures must be a non-empty sequence of positive floats"
+            )
+
+        rng = np.random.default_rng(seed)
+        best_tour = start_tour.copy()
+        best_len = sum(
+            float(dist[best_tour[idx], best_tour[(idx + 1) % n]]) for idx in range(n)
+        )
+
+        for restart in range(restarts):
+            tour = start_tour.copy() if restart == 0 else best_tour.copy()
+            current_len = sum(
+                float(dist[tour[idx], tour[(idx + 1) % n]]) for idx in range(n)
+            )
+
+            for temp in schedule:
+                for _ in range(max_iter):
+                    i = int(rng.integers(0, n))
+                    j = int(rng.integers(0, n))
+                    while i == j or (i - j) % n in (1, n - 1):
+                        j = int(rng.integers(0, n))
+                    if i > j:
+                        i, j = j, i
+
+                    a, b = tour[i], tour[i + 1]
+                    c, d = tour[j], tour[(j + 1) % n]
+                    delta = float(dist[a, c] + dist[b, d] - dist[a, b] - dist[c, d])
+
+                    if delta < 0.0 or rng.random() < math.exp(-delta / temp):
+                        tour[i + 1 : j + 1] = reversed(tour[i + 1 : j + 1])
+                        current_len += delta
+                        if current_len < best_len:
+                            best_len = current_len
+                            best_tour = tour.copy()
+
+        one_based_best = [v + 1 for v in best_tour]
+        return one_based_best, self.tour_length(one_based_best)

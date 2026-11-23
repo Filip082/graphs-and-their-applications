@@ -279,3 +279,20 @@ def test_edge_labels_option() -> None:
         assert "7/10" in texts
     finally:
         root.destroy()
+
+
+def test_planar_tour() -> None:
+    points = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+    tour = [1, 2, 3, 4]
+    try:
+        root = visualize.planar_tour(points, tour, show=False)
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        assert _get_canvas_counts(root) == (4, 4, 0)
+    finally:
+        root.destroy()
+
+    with pytest.raises(ValueError):
+        visualize.planar_tour(points, [1, 2, 3], show=False)

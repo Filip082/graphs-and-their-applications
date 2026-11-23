@@ -595,7 +595,7 @@ def test_center_and_minimax_edge_cases() -> None:
         disconnected.minimax()
 
 
-def _mst_edge_count_and_weight(tree: Graph) -> tuple[int, int]:
+def _mst_edge_count_and_weight(tree: Graph) -> tuple[int, int | float]:
     edges = [
         (u_idx, neighbor.v - 1, neighbor.w)
         for u_idx, neighbors in enumerate(tree.adjacency_list())
@@ -1053,3 +1053,156 @@ def test_ford_fulkerson_input5_example() -> None:
     assert int(flow[7, 10]) == 7
     assert int(flow[8, 10]) == 5
     assert int(flow[9, 10]) == 7
+
+
+def test_pagerank_input6_example() -> None:
+    from pathlib import Path
+
+    data_path = (
+        Path(__file__).resolve().parent.parent
+        / "examples"
+        / "lab06"
+        / "data"
+        / "pagerank_adj_list.txt"
+    )
+    g = Graph.from_file(data_path, "adjacency_list")
+    pi = g.pagerank_power_iteration(d=0.15)
+    rw = g.pagerank_random_walk(d=0.15, steps=200_000, seed=42)
+
+    assert pi.shape == (12,)
+    assert rw.shape == (12,)
+    assert abs(float(pi.sum()) - 1.0) < 1e-12
+    assert abs(float(rw.sum()) - 1.0) < 1e-12
+
+    # Expected values from task/input_6.pdf Listing 2(b) (A=0..L=11)
+    expected_pi = np.array(
+        [
+            0.053512,  # A (1)
+            0.058454,  # B (2)
+            0.072024,  # C (3)
+            0.102309,  # D (4)
+            0.120326,  # E (5)
+            0.072116,  # F (6)
+            0.098443,  # G (7)
+            0.139879,  # H (8)
+            0.150941,  # I (9)
+            0.044575,  # J (10)
+            0.029892,  # K (11)
+            0.057529,  # L (12)
+        ],
+        dtype=np.float64,
+    )
+    np.testing.assert_allclose(pi, expected_pi, atol=1e-5)
+    np.testing.assert_allclose(rw, pi, atol=0.01)
+
+    # Ranking order: I, H, E, D, G, F, C, B, L, A, J, K
+    order = list(np.argsort(-pi))
+    assert order == [8, 7, 4, 3, 6, 5, 2, 1, 11, 0, 9, 10]
+
+
+def test_pagerank_edge_cases() -> None:
+    empty = Graph([], "adjacency_list")
+    assert empty.pagerank_power_iteration().shape == (0,)
+    assert empty.pagerank_random_walk(steps=10).shape == (0,)
+
+    single = Graph([[]], "adjacency_list")
+    np.testing.assert_allclose(single.pagerank_power_iteration(), [1.0])
+    np.testing.assert_allclose(single.pagerank_random_walk(steps=100, seed=1), [1.0])
+
+    # Periodic 2-cycle with d=0: power iteration averages to [0.5, 0.5]
+    cycle2 = Graph([[Neighbor(2)], [Neighbor(1)]], "adjacency_list")
+    np.testing.assert_allclose(
+        cycle2.pagerank_power_iteration(d=0.0, max_iter=100, tol=1e-12),
+        [0.5, 0.5],
+        atol=1e-12,
+    )
+
+    # Dangling node (2 has no outgoing edges)
+    dangling = Graph([[Neighbor(2)], []], "adjacency_list")
+    pi = dangling.pagerank_power_iteration(d=0.15)
+    rw = dangling.pagerank_random_walk(d=0.15, steps=50_000, seed=7)
+    assert abs(float(pi.sum()) - 1.0) < 1e-12
+    np.testing.assert_allclose(rw, pi, atol=0.01)
+
+    with pytest.raises(ValueError):
+        cycle2.pagerank_power_iteration(d=-0.1)
+    with pytest.raises(ValueError):
+        cycle2.pagerank_power_iteration(d=1.1)
+    with pytest.raises(ValueError):
+        cycle2.pagerank_power_iteration(max_iter=0)
+    with pytest.raises(ValueError):
+        cycle2.pagerank_power_iteration(tol=-1.0)
+    with pytest.raises(ValueError):
+        cycle2.pagerank_random_walk(d=1.5)
+    with pytest.raises(ValueError):
+        cycle2.pagerank_random_walk(steps=0)
+
+
+def test_float_weights_and_from_points() -> None:
+    points = [(0.0, 0.0), (3.0, 0.0), (0.0, 4.0)]
+    g = Graph.from_points(points)
+    assert g.vertex_count == 3
+    mat = g.adjacency_matrix()
+    assert mat.dtype == np.float64
+    assert math.isclose(float(mat[0, 1]), 3.0)
+    assert math.isclose(float(mat[0, 2]), 4.0)
+    assert math.isclose(float(mat[1, 2]), 5.0)
+    assert math.isclose(g.tour_length([1, 2, 3]), 12.0)
+
+    g_adj = Graph(
+        [[Neighbor(2, 1.5)], [Neighbor(1, 1.5)]],
+        "adjacency_list",
+    )
+    assert g_adj.adjacency_matrix().dtype == np.float64
+    assert math.isclose(float(g_adj.adjacency_matrix()[0, 1]), 1.5)
+    assert math.isclose(float(g_adj.incidence_matrix()[0, 0]), 1.5)
+
+    assert Graph.from_points([]).vertex_count == 0
+    with pytest.raises(ValueError):
+        g.tour_length([1, 2])
+    with pytest.raises(ValueError):
+        g.tour_length([0, 1, 2])
+
+
+def test_simulated_annealing_tsp() -> None:
+    points = [
+        (0.0, 0.0),
+        (2.0, 2.0),
+        (1.0, 0.0),
+        (0.0, 2.0),
+        (2.0, 0.0),
+        (1.0, 2.0),
+        (2.0, 1.0),
+        (0.0, 1.0),
+    ]
+    g = Graph.from_points(points)
+    initial = list(range(1, len(points) + 1))
+    init_len = g.tour_length(initial)
+    tour, length = g.simulated_annealing_tsp(
+        max_iter=300, restarts=2, initial_tour=initial, seed=42
+    )
+    assert len(tour) == len(points)
+    assert set(tour) == set(range(1, len(points) + 1))
+    assert math.isclose(length, g.tour_length(tour))
+    assert length < init_len
+    assert math.isclose(length, 8.0, rel_tol=1e-9)
+
+    assert Graph.from_points([]).simulated_annealing_tsp() == ([], 0.0)
+    assert Graph.from_points([(1.0, 2.0)]).simulated_annealing_tsp() == ([1], 0.0)
+
+    two = Graph.from_points([(0.0, 0.0), (3.0, 4.0)])
+    tour2, len2 = two.simulated_annealing_tsp()
+    assert tour2 == [1, 2]
+    assert math.isclose(len2, 10.0)
+
+    directed = Graph([[Neighbor(2, 1.0)], []], "adjacency_list")
+    with pytest.raises(ValueError):
+        directed.simulated_annealing_tsp()
+    with pytest.raises(ValueError):
+        g.simulated_annealing_tsp(max_iter=0)
+    with pytest.raises(ValueError):
+        g.simulated_annealing_tsp(restarts=0)
+    with pytest.raises(ValueError):
+        g.simulated_annealing_tsp(initial_tour=[1, 2])
+    with pytest.raises(ValueError):
+        g.simulated_annealing_tsp(temperatures=[0.0])
