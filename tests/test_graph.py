@@ -945,3 +945,111 @@ def test_johnson() -> None:
     np.testing.assert_array_equal(
         Graph([[]], "adjacency_list").johnson(), np.array([[0.0]])
     )
+
+
+def test_create_random_flow_network() -> None:
+    for n in (2, 3, 4):
+        g = Graph.create_random_flow_network(n)
+        mat = g.adjacency_matrix()
+        v_count = g.vertex_count
+        assert 2 + 2 * n <= v_count <= 2 + n * n
+        assert np.all(mat[:, 0] == 0)
+        assert np.all(mat[v_count - 1, :] == 0)
+        assert np.all(np.diag(mat) == 0)
+        _assert_weights_in_range(g, low=1, high=10)
+        assert np.any(mat[0, :] > 0)
+        assert np.any(mat[:, v_count - 1] > 0)
+
+    for bad_n in (0, 1, -2, True):
+        with pytest.raises(ValueError):
+            Graph.create_random_flow_network(bad_n)
+    with pytest.raises(ValueError):
+        Graph.create_random_flow_network(2, min_weight=0, max_weight=5)
+
+
+def test_ford_fulkerson() -> None:
+    # Classic CLRS flow network (6 vertices: s=1, t=6, max flow=23)
+    clrs = Graph(
+        [
+            [Neighbor(2, 16), Neighbor(3, 13)],
+            [Neighbor(3, 10), Neighbor(4, 12)],
+            [Neighbor(2, 4), Neighbor(5, 14)],
+            [Neighbor(3, 9), Neighbor(6, 20)],
+            [Neighbor(4, 7), Neighbor(6, 4)],
+            [],
+        ],
+        "adjacency_list",
+    )
+    max_flow, flow_graph = clrs.ford_fulkerson(1, 6)
+    assert max_flow == 23
+
+    cap = clrs.adjacency_matrix()
+    flow = flow_graph.adjacency_matrix()
+    assert np.all(flow >= 0)
+    assert np.all(flow <= cap)
+    assert int(flow[0, :].sum() - flow[:, 0].sum()) == 23
+    assert int(flow[:, 5].sum() - flow[5, :].sum()) == 23
+    for v in range(1, 5):
+        assert int(flow[:, v].sum()) == int(flow[v, :].sum())
+
+    # Disconnected sink -> max flow is 0
+    disconnected = Graph(
+        [[Neighbor(2, 5)], [], [Neighbor(4, 3)], []],
+        "adjacency_list",
+    )
+    zero_flow, zero_graph = disconnected.ford_fulkerson(1, 4)
+    assert zero_flow == 0
+    assert np.all(zero_graph.adjacency_matrix() == 0)
+
+    # Random flow network conservation and capacity constraints
+    net = Graph.create_random_flow_network(3)
+    net_max, net_flow_graph = net.ford_fulkerson(1, net.vertex_count)
+    net_cap = net.adjacency_matrix()
+    net_flow = net_flow_graph.adjacency_matrix()
+    assert net_max > 0
+    assert np.all(net_flow >= 0)
+    assert np.all(net_flow <= net_cap)
+    assert int(net_flow[0, :].sum() - net_flow[:, 0].sum()) == net_max
+
+    with pytest.raises(ValueError):
+        clrs.ford_fulkerson(1, 1)
+    with pytest.raises(ValueError):
+        clrs.ford_fulkerson(0, 6)
+    with pytest.raises(ValueError):
+        clrs.ford_fulkerson(1, 7)
+
+    neg_cap = Graph([[Neighbor(2, -1)], []], "adjacency_list")
+    with pytest.raises(ValueError):
+        neg_cap.ford_fulkerson(1, 2)
+
+
+def test_ford_fulkerson_input5_example() -> None:
+    from pathlib import Path
+
+    data_path = (
+        Path(__file__).resolve().parent.parent
+        / "examples"
+        / "lab05"
+        / "data"
+        / "flow_network_adj_list.txt"
+    )
+    g = Graph.from_file(data_path, "adjacency_list", weighted=True)
+    max_flow, flow_graph = g.ford_fulkerson(1, 11)
+    assert max_flow == 19
+    flow = flow_graph.adjacency_matrix()
+    assert int(flow[0, 1]) == 10
+    assert int(flow[0, 2]) == 3
+    assert int(flow[0, 3]) == 6
+    assert int(flow[1, 2]) == 5
+    assert int(flow[1, 4]) == 0
+    assert int(flow[1, 5]) == 5
+    assert int(flow[2, 5]) == 2
+    assert int(flow[2, 6]) == 6
+    assert int(flow[3, 4]) == 5
+    assert int(flow[3, 6]) == 1
+    assert int(flow[4, 8]) == 5
+    assert int(flow[5, 9]) == 7
+    assert int(flow[6, 7]) == 7
+    assert int(flow[7, 10]) == 7
+    assert int(flow[8, 10]) == 5
+    assert int(flow[9, 10]) == 7

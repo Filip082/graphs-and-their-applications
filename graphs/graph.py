@@ -277,6 +277,66 @@ class Graph:
             max_weight=max_weight,
         )
 
+    @staticmethod
+    def create_random_flow_network(
+        n: int = 3,
+        min_weight: int = 1,
+        max_weight: int = 10,
+    ) -> "Graph":
+        Graph._validate_weight_range(min_weight, max_weight)
+        if min_weight <= 0:
+            raise ValueError("Flow network capacities must be positive")
+        if isinstance(n, bool) or not isinstance(n, int) or n < 2:
+            raise ValueError(f"Number of intermediate layers n must be >= 2, got {n!r}")
+
+        rng = np.random.default_rng()
+        layers: list[list[int]] = [[0]]
+        next_vertex = 1
+        for _ in range(n):
+            count = int(rng.integers(2, n + 1))
+            layers.append(list(range(next_vertex, next_vertex + count)))
+            next_vertex += count
+        sink = next_vertex
+        layers.append([sink])
+        total_vertices = sink + 1
+
+        edges: set[tuple[int, int]] = set()
+        for idx in range(len(layers) - 1):
+            curr_layer = layers[idx]
+            next_layer = layers[idx + 1]
+            for u in curr_layer:
+                v = next_layer[int(rng.integers(0, len(next_layer)))]
+                edges.add((u, v))
+            in_deg_zero = [v for v in next_layer if all(u_v[1] != v for u_v in edges)]
+            for v in in_deg_zero:
+                u = curr_layer[int(rng.integers(0, len(curr_layer)))]
+                edges.add((u, v))
+
+        candidates = [
+            (u, v)
+            for u in range(total_vertices)
+            for v in range(total_vertices)
+            if u != v and v != 0 and u != sink and (u, v) not in edges
+        ]
+        if len(candidates) < 2 * n:
+            raise ValueError("Not enough candidate arcs to add 2*n random arcs")
+        chosen_idx = rng.choice(len(candidates), size=2 * n, replace=False)
+        for idx in chosen_idx:
+            edges.add(candidates[int(idx)])
+
+        edge_list = sorted(edges)
+        rows = np.array([u for u, _ in edge_list], dtype=np.int64)
+        cols = np.array([v for _, v in edge_list], dtype=np.int64)
+        return Graph._random_weighted_matrix(
+            total_vertices,
+            rows,
+            cols,
+            rng,
+            directed=True,
+            min_weight=min_weight,
+            max_weight=max_weight,
+        )
+
     def adjacency_list(self) -> AdjacencyList:
         if self.data_type == "adjacency_list":
             return [list(neighbors) for neighbors in cast(AdjacencyList, self.data)]
@@ -908,3 +968,62 @@ class Graph:
         if len(mst_edges) < count - 1:
             raise ValueError("Cannot find spanning tree for a disconnected graph")
         return Graph._graph_from_weighted_edges(count, mst_edges)
+
+    @staticmethod
+    def _bfs_augmenting_path(
+        residual: NDArray[np.int64], source: int, sink: int
+    ) -> list[int | None] | None:
+        count = int(residual.shape[0])
+        dist: list[int | float] = [math.inf] * count
+        prev: list[int | None] = [None] * count
+        dist[source] = 0
+        queue = deque([source])
+
+        while queue:
+            v = queue.popleft()
+            for u in range(count):
+                if residual[v, u] > 0 and dist[u] == math.inf:
+                    dist[u] = dist[v] + 1
+                    prev[u] = v
+                    if u == sink:
+                        return prev
+                    queue.append(u)
+        return None
+
+    def ford_fulkerson(self, s: int, t: int) -> tuple[int, "Graph"]:
+        self._validate_vertex(s, "s")
+        self._validate_vertex(t, "t")
+        if s == t:
+            raise ValueError("Source and sink vertices must be different")
+
+        cap = self.adjacency_matrix()
+        if np.any(cap < 0):
+            raise ValueError("Ford-Fulkerson requires non-negative edge capacities")
+
+        residual = cap.copy()
+        source = s - 1
+        sink = t - 1
+        max_flow = 0
+
+        while (prev := self._bfs_augmenting_path(residual, source, sink)) is not None:
+            path_cap = math.inf
+            curr: int = sink
+            while curr != source:
+                parent = prev[curr]
+                assert parent is not None
+                path_cap = min(path_cap, int(residual[parent, curr]))
+                curr = parent
+
+            augment = int(path_cap)
+            curr = sink
+            while curr != source:
+                parent = prev[curr]
+                assert parent is not None
+                residual[parent, curr] -= augment
+                residual[curr, parent] += augment
+                curr = parent
+
+            max_flow += augment
+
+        flow_matrix = np.maximum(0, cap - residual)
+        return max_flow, Graph(flow_matrix, "adjacency_matrix")

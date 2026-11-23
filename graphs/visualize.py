@@ -1,7 +1,7 @@
 import math
 import tkinter as tk
 from collections import defaultdict, deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from graphs.graph import Graph
 from graphs.types import AdjacencyList
@@ -89,6 +89,7 @@ def _draw_graph(
     show_weights: bool = False,
     subgraph_edges: set[tuple[int, int]] | None = None,
     arrow: bool = False,
+    edge_labels: Mapping[tuple[int, int], str] | None = None,
 ) -> None:
     highlighted = subgraph_edges or set()
     edge_set = {
@@ -160,7 +161,12 @@ def _draw_graph(
                 label_x, label_y = mx, my
 
             if show_weights:
-                label = str(neighbor.w)
+                key = (u_idx + 1, neighbor.v)
+                label = (
+                    edge_labels[key]
+                    if edge_labels is not None and key in edge_labels
+                    else str(neighbor.w)
+                )
                 pad_x = max(8, 4 * len(label) + 4)
                 canvas.create_rectangle(
                     label_x - pad_x,
@@ -257,6 +263,7 @@ def _render_graph(
     subgraph: Graph | None,
     arrow: bool,
     layout: Callable[[tk.Canvas, AdjacencyList], list[tuple[float, float]]],
+    edge_labels: Mapping[tuple[int, int], str] | None = None,
 ) -> tk.Tk:
     sub_edges = _subgraph_edges(subgraph, graph.vertex_count)
     root = tk.Tk()
@@ -269,7 +276,14 @@ def _render_graph(
         adj = graph.adjacency_list()
         positions = layout(canvas, adj)
         _draw_graph(
-            canvas, adj, positions, vertex_radius, show_weights, sub_edges, arrow
+            canvas,
+            adj,
+            positions,
+            vertex_radius,
+            show_weights,
+            sub_edges,
+            arrow,
+            edge_labels,
         )
 
     if show:
@@ -291,6 +305,7 @@ def circular(
     show_weights: bool = False,
     subgraph: Graph | None = None,
     arrow: bool = False,
+    edge_labels: Mapping[tuple[int, int], str] | None = None,
 ) -> tk.Tk:
     def layout(canvas: tk.Canvas, adj: AdjacencyList) -> list[tuple[float, float]]:
         n = len(adj)
@@ -324,6 +339,7 @@ def circular(
         subgraph,
         arrow,
         layout,
+        edge_labels,
     )
 
 
@@ -339,6 +355,7 @@ def layered(
     show_weights: bool = False,
     subgraph: Graph | None = None,
     arrow: bool = False,
+    edge_labels: Mapping[tuple[int, int], str] | None = None,
 ) -> tk.Tk:
     n = graph.vertex_count
     if n > 0 and not 1 <= start_vertex <= n:
@@ -376,4 +393,5 @@ def layered(
         subgraph,
         arrow,
         layout,
+        edge_labels,
     )

@@ -253,3 +253,29 @@ def test_arrow_option() -> None:
     finally:
         root_no_arrow.destroy()
         root_arrow.destroy()
+
+
+def test_edge_labels_option() -> None:
+    g = Graph([[Neighbor(2, 10)], []], "adjacency_list")
+    try:
+        root = visualize.layered(
+            g,
+            show=False,
+            show_weights=True,
+            arrow=True,
+            edge_labels={(1, 2): "7/10"},
+        )
+    except tk.TclError:
+        pytest.skip("Tk display not available")
+
+    try:
+        canvases = [w for w in root.winfo_children() if isinstance(w, tk.Canvas)]
+        canvas = canvases[0]
+        texts = [
+            canvas.itemcget(i, "text")
+            for i in canvas.find_all()
+            if canvas.type(i) == "text"
+        ]
+        assert "7/10" in texts
+    finally:
+        root.destroy()
